@@ -1,1 +1,53 @@
 @import 'tailwindcss';
+
+/* Design tokens: the single source for color, font and shadow. Light theme only. */
+@theme {
+  /* Brand */
+  --color-ink: #09142f;
+  --color-accent: #ed2690;
+  --color-accent-soft: #fceef6;
+  --color-blue: #1a3edb;
+
+  /* Surfaces and text */
+  --color-surface: #f2f4ff;
+  --color-border: #cdd5de;
+  --color-text-muted: #5b5773;
+  --color-text-faint: #8f96b0;
+
+  /* Graph nodes */
+  --color-entry: #09142f;
+  --color-entry-fg: #ffffff;
+  --color-sink: #f2f4ff;
+  --color-sink-border: #1a3edb;
+  --color-inferred-border: #8f96b0;
+  --color-inferred-fg: #5b5773;
+
+  /* Severity: fg on its tinted bg */
+  --color-severity-critical: #ec0202;
+  --color-severity-critical-bg: #fff5f5;
+  --color-severity-high: #c2410c;
+  --color-severity-high-bg: #fff7ed;
+  --color-severity-medium: #b45309;
+  --color-severity-medium-bg: #fffbeb;
+  --color-severity-low: #1a3edb;
+  --color-severity-low-bg: #eef1fd;
+
+  /* Fonts */
+  --font-display: Outfit, Arial, sans-serif;
+  --font-sans: Inter, Arial, sans-serif;
+
+  /* Hard offset shadows, no blur */
+  --shadow-hard: 4px 4px 0 0 var(--color-ink);
+  --shadow-hard-accent: 4px 4px 0 0 var(--color-accent);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+  }
+}

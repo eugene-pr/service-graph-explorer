@@ -14,18 +14,18 @@ interface ExplorerLayoutProps {
 
 export function ExplorerLayout({ banner, sidebar, main, aside, bottom }: ExplorerLayoutProps) {
   return (
-    <div className="flex h-screen flex-col bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white px-4 py-2">
-        <h1 className="text-base font-semibold">Service Graph Explorer</h1>
+    <div className="flex h-screen flex-col bg-surface font-sans text-ink">
+      <header className="bg-ink px-4 py-2 text-white">
+        <h1 className="font-display text-lg font-bold">Service Graph Explorer</h1>
       </header>
       {banner}
       <div className="flex min-h-0 flex-1">
-        <aside className="w-72 shrink-0 space-y-6 overflow-y-auto border-r border-slate-200 bg-white p-4">{sidebar}</aside>
+        <aside className="w-72 shrink-0 space-y-6 overflow-y-auto border-r border-border bg-white p-4">{sidebar}</aside>
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className="relative min-h-0 flex-1">{main}</main>
-          {bottom && <div className="max-h-[40%] shrink-0 overflow-y-auto border-t border-slate-200 bg-white p-4">{bottom}</div>}
+          <main className="relative min-h-0 flex-1 bg-surface">{main}</main>
+          {bottom && <div className="max-h-[40%] shrink-0 overflow-y-auto border-t border-border bg-white p-4">{bottom}</div>}
         </div>
-        <aside className="w-80 shrink-0 overflow-y-auto border-l border-slate-200 bg-white p-4">{aside}</aside>
+        <aside className="w-80 shrink-0 overflow-y-auto border-l border-border bg-white p-4">{aside}</aside>
       </div>
     </div>
   );
