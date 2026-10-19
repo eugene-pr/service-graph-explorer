@@ -1,4 +1,4 @@
-import type { FilterLeaf, FilterName, FilterPosition, ProblemError, Query, RoutesResponse } from '@sge/domain';
+import type { AndQuery, FilterLeaf, FilterName, FilterPosition, ProblemError, Query, RoutesResponse } from '@sge/domain';
 import { filters as catalogFilters } from '../filters/index.js';
 import type { Filter, Filters, NodeCheck, Route, RouteCheck } from '../filters/filter.js';
 import type { Graph } from '../graph/graph.js';
@@ -24,25 +24,30 @@ const DEFAULT_START = { filter: 'startsAtEntry' satisfies FilterName };
  * Throws a `QueryError` for an unknown Filter or bad params.
  */
 export function findRoutes(graph: Graph, query: Query, { limit, filters = catalogFilters }: FindRoutesOptions): RoutesResponse {
-  const isLeafAt = (position: FilterPosition) => (member: Query) =>
-    'filter' in member && filters.get(member.filter)?.position === position;
-  const effectiveQuery = withDefaultStart(query, isLeafAt('start'));
+  const isStartLeaf = (member: Query) => 'filter' in member && filters.get(member.filter)?.position === 'start';
+  const effectiveQuery = withDefaultStart(query, isStartLeaf);
 
   const errors: ProblemError[] = [];
-  const matches = compile(effectiveQuery, graph, filters, errors);
+  // Start candidates, pruning and the depth limit read only the Filters directly in the top-level `and`, never `or`/`not` members.
+  const topLevelLeaves: PreparedLeaf[] = [];
+  const members = effectiveQuery.and.map((member) => {
+    if (!('filter' in member)) return compile(member, graph, filters, errors);
+    const prepared = prepareLeaf(member, graph, filters, errors);
+    if (!prepared) return () => false;
+    topLevelLeaves.push(prepared);
+    return prepared.matches;
+  });
   if (errors.length > 0) throw new QueryError(errors);
-  // Start candidates and pruning read only direct members of the top-level `and`, never `or`/`not` members.
-  const checksAt = (position: FilterPosition) =>
-    topLevelMembers(effectiveQuery)
-      .filter(isLeafAt(position))
-      .map((leaf) => compile(leaf, graph, filters, errors));
+  const matches: RouteMatcher = (route) => members.every((member) => member(route));
+  const checksAt = (position: FilterPosition) => topLevelLeaves.filter((leaf) => leaf.filter.position === position).map((leaf) => leaf.matches);
   const startChecks = checksAt('start');
   const endChecks = checksAt('end');
+  const maxEdges = Math.min(...topLevelLeaves.map(({ check }) => ('route' in check ? (check.maxEdges ?? Infinity) : Infinity)));
 
   // A one-node Route puts its node first and last, so start and end checks can test a single node.
   const starts = graph.nodes.filter((node) => startChecks.every((check) => check([node.name])));
   const reachable = endChecks.length > 0 ? canReachEnd(graph, (name) => endChecks.every((check) => check([name]))) : undefined;
-  const routes = search(graph, starts.map((node) => node.name), matches, limit + 1, reachable);
+  const routes = search(graph, starts.map((node) => node.name), matches, limit + 1, { reachable, maxEdges });
   const truncated = routes.length > limit;
   if (truncated) routes.pop();
 
@@ -53,14 +58,10 @@ export function findRoutes(graph: Graph, query: Query, { limit, filters = catalo
   };
 }
 
-function topLevelMembers(query: Query): Query[] {
-  return 'and' in query ? query.and : [];
-}
-
 /** Default view: with no start Filter directly in the top-level `and`, Routes start at Entries. */
-function withDefaultStart(query: Query, isStartLeaf: (member: Query) => boolean): Query {
-  if (topLevelMembers(query).some(isStartLeaf)) return query;
-  return { and: [DEFAULT_START, ...('and' in query ? topLevelMembers(query) : [query])] };
+function withDefaultStart(query: Query, isStartLeaf: (member: Query) => boolean): AndQuery {
+  if ('and' in query && query.and.some(isStartLeaf)) return query;
+  return { and: [DEFAULT_START, ...('and' in query ? query.and : [query])] };
 }
 
 type RouteMatcher = (route: Route) => boolean;
@@ -74,17 +75,28 @@ function compile(query: Query, graph: Graph, filters: Filters, errors: ProblemEr
 }
 
 function compileLeaf(leaf: FilterLeaf, graph: Graph, filters: Filters, errors: ProblemError[]): RouteMatcher {
+  return prepareLeaf(leaf, graph, filters, errors)?.matches ?? (() => false);
+}
+
+interface PreparedLeaf {
+  filter: Filter;
+  check: NodeCheck | RouteCheck;
+  matches: RouteMatcher;
+}
+
+/** The leaf's Filter, check and matcher, or undefined after pushing to `errors`. */
+function prepareLeaf(leaf: FilterLeaf, graph: Graph, filters: Filters, errors: ProblemError[]): PreparedLeaf | undefined {
   const filter = filters.get(leaf.filter);
   if (!filter) {
     errors.push({ filter: leaf.filter, message: `Unknown Filter "${leaf.filter}".` });
-    return () => false;
+    return undefined;
   }
   const prepared = filter.prepare(leaf.params, graph);
   if (!prepared.ok) {
     errors.push(...prepared.errors);
-    return () => false;
+    return undefined;
   }
-  return toRouteMatcher(filter, prepared.check, graph);
+  return { filter, check: prepared.check, matches: toRouteMatcher(filter, prepared.check, graph) };
 }
 
 function toRouteMatcher(filter: Filter, check: NodeCheck | RouteCheck, graph: Graph): RouteMatcher {
@@ -122,11 +134,21 @@ function canReachEnd(graph: Graph, isEnd: (name: string) => boolean): ReadonlySe
   return reached;
 }
 
-/**
- * DFS over simple paths, in source-data order, until `max` matching Routes are found.
- * With `reachable`, nodes outside it are skipped.
- */
-function search(graph: Graph, starts: readonly string[], matches: RouteMatcher, max: number, reachable?: ReadonlySet<string>): Route[] {
+interface SearchBounds {
+  /** Nodes outside it are skipped. */
+  reachable?: ReadonlySet<string> | undefined;
+  /** Paths stop growing at this many edges. */
+  maxEdges?: number;
+}
+
+/** DFS over simple paths, in source-data order, until `max` matching Routes are found. */
+function search(
+  graph: Graph,
+  starts: readonly string[],
+  matches: RouteMatcher,
+  max: number,
+  { reachable, maxEdges = Infinity }: SearchBounds,
+): Route[] {
   const routes: Route[] = [];
   const path: string[] = [];
   const onPath = new Set<string>();
@@ -138,7 +160,7 @@ function search(graph: Graph, starts: readonly string[], matches: RouteMatcher, 
     const next = graph.successors(name);
     if (next.length === 0) {
       if (path.length > 1 && matches(path)) routes.push([...path]);
-    } else {
+    } else if (path.length - 1 < maxEdges) {
       for (const target of next) {
         if (routes.length >= max) break;
         if (!skip(target)) visit(target);

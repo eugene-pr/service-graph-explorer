@@ -26,6 +26,7 @@ export const implementations: FilterImplementations<typeof filterCatalog> = {
     if (!graph.node(node)) return { mismatches: [{ param: 'node', message: `Node "${node}" is not in the graph.` }] };
     return { node: (candidate) => candidate.name === node };
   },
+  maxLength: ({ hops }) => ({ route: (route) => route.length - 1 <= hops, maxEdges: hops }),
 };
 
 /** Every Filter in the Filter Catalog, with its check. */

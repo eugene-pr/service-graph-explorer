@@ -59,6 +59,13 @@ export const filterCatalog = {
       node: z.string().min(1).meta({ description: 'Name of a node in the graph.' }),
     }),
   },
+  maxLength: {
+    description: 'Has at most this many hops (edges).',
+    position: 'route',
+    params: z.strictObject({
+      hops: z.number().int().min(1).meta({ description: 'Most edges a Route may have; at least 1.' }),
+    }),
+  },
 } satisfies FilterCatalog;
 
 export type FilterName = keyof typeof filterCatalog;

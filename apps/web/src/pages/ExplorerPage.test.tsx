@@ -253,6 +253,19 @@ describe('ExplorerPage', () => {
       await vi.waitFor(() => expect(requests.at(-1)?.get('hasVulnerability.minSeverity')).toBe('high'));
     });
 
+    it('offers maxLength with a number input for hops, sending it namespaced by Filter', async () => {
+      const user = userEvent.setup();
+      const requests = recordRoutesRequests();
+      renderWithQueryClient(<ExplorerPage />);
+
+      await user.click(await screen.findByRole('checkbox', { name: 'maxLength' }));
+      await user.type(screen.getByRole('spinbutton', { name: 'hops' }), '2');
+      await user.click(screen.getByRole('button', { name: /run/i }));
+
+      await vi.waitFor(() => expect(requests.at(-1)?.get('filters')).toBe('maxLength'));
+      expect(requests.at(-1)?.get('maxLength.hops')).toBe('2');
+    });
+
     it('reset returns to the default view', async () => {
       const user = userEvent.setup();
       recordRoutesRequests((params) => (params.get('filters') === 'startsAtPublic' ? [['frontend', 'assurance-service']] : entryRoutes));

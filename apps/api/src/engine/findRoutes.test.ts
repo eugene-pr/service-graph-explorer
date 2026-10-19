@@ -333,6 +333,64 @@ describe('passesThrough', () => {
   });
 });
 
+describe('maxLength', () => {
+  // s -> e1                1 hop
+  // s -> m -> e2           2 hops
+  // s -> m -> n -> e3      3 hops
+  // s -> m -> n -> p -> m  cycle back into the Route
+  const lengths = loadGraph({
+    nodes: [service('s'), service('e1'), service('m'), service('e2'), service('n'), service('e3'), service('p')],
+    edges: [
+      { from: 's', to: ['e1', 'm'] },
+      { from: 'm', to: ['e2', 'n'] },
+      { from: 'n', to: ['e3', 'p'] },
+      { from: 'p', to: 'm' },
+    ],
+  });
+  const maxLength = (hops: unknown) => ({ filter: 'maxLength', params: { hops } });
+
+  it.each([
+    [1, [['s', 'e1']]],
+    [2, [['s', 'e1'], ['s', 'm', 'e2']]],
+    [3, [['s', 'e1'], ['s', 'm', 'e2'], ['s', 'm', 'n', 'e3']]],
+  ])('with `hops: %i`, matches Routes with at most that many edges', (hops, expected) => {
+    expect(findRoutes(lengths, { and: [maxLength(hops)] }, { limit: 100 }).routes).toEqual(expected);
+  });
+
+  it('returns the same Routes as without the depth limit, with and without a limit', () => {
+    // A nested `and` isn't a direct member of the top-level `and`, so it doesn't limit search depth.
+    for (const hops of [1, 2, 3, 4]) {
+      for (const limit of [1, 2, 100]) {
+        const bounded = findRoutes(lengths, { and: [maxLength(hops)] }, { limit });
+        const unbounded = findRoutes(lengths, { and: [{ and: [maxLength(hops)] }] }, { limit });
+        expect(bounded.routes).toEqual(unbounded.routes);
+        expect(bounded.meta.truncated).toBe(unbounded.meta.truncated);
+      }
+    }
+  });
+
+  it('stops the search at the `maxEdges` of a route Filter in the top-level `and`, never one nested deeper', () => {
+    // Accepts every Route, so only the depth limit can drop the longer ones.
+    const filters = createFilters(
+      {
+        ...fixtureCatalog,
+        depthLimitOnly: { description: 'Limits depth, matches all.', position: 'route', params: z.strictObject({}) },
+      } satisfies FilterCatalog,
+      { ...fixtureImplementations, depthLimitOnly: () => ({ route: () => true, maxEdges: 2 }) },
+    );
+    const depthLimitOnly = { filter: 'depthLimitOnly' };
+
+    expect(findRoutes(lengths, { and: [depthLimitOnly] }, { limit: 100, filters }).routes).toEqual([['s', 'e1'], ['s', 'm', 'e2']]);
+    expect(findRoutes(lengths, { and: [{ and: [depthLimitOnly] }] }, { limit: 100, filters }).routes).toHaveLength(3);
+  });
+
+  it('rejects `hops` below 1 or not an integer, naming the Filter and param', () => {
+    for (const hops of [0, 1.5, '2', undefined]) {
+      expect(errorsOf({ and: [maxLength(hops)] }, lengths)).toMatchObject([{ filter: 'maxLength', param: 'hops' }]);
+    }
+  });
+});
+
 describe('pruning', () => {
   /** Checks the last node's kind as a whole-Route Filter, which never drives pruning: an unpruned twin of `endsAtSink`. */
   const filters = createFilters(

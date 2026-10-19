@@ -87,6 +87,17 @@ export const filtersFixture: FiltersResponse = {
       position: 'any',
       params: { type: 'object', properties: { node: { type: 'string' } }, required: ['node'], additionalProperties: false },
     },
+    {
+      name: 'maxLength',
+      description: 'Has at most this many hops (edges).',
+      position: 'route',
+      params: {
+        type: 'object',
+        properties: { hops: { type: 'integer', description: 'Most edges a Route may have; at least 1.' } },
+        required: ['hops'],
+        additionalProperties: false,
+      },
+    },
   ],
 };
 

@@ -12,6 +12,8 @@ export interface NodeCheck {
 /** Checks the whole Route. */
 export interface RouteCheck {
   route(route: Route): boolean;
+  /** No Route with more edges matches, so the search needn't go deeper. Read only from direct members of the top-level `and`. */
+  maxEdges?: number;
 }
 type CheckFor<P extends FilterPosition> = P extends 'route' ? RouteCheck : NodeCheck;
 
