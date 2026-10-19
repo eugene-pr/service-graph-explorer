@@ -12,6 +12,7 @@ const initialUiState = useUiStore.getState();
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, '', '/');
   server.resetHandlers();
   useUiStore.setState(initialUiState, true);
 });

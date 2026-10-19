@@ -4,6 +4,9 @@ import { GraphEdge, GraphNode } from './graph.js';
 export const DEFAULT_LIMIT = 100;
 export const MAX_LIMIT = 1000;
 
+/** How the explorer displays Query results. Omitted in the URL for the full graph. */
+export const ViewMode = z.enum(['full', 'matched']).default('full');
+
 /** Most Routes a Query returns. Coerced, so it parses from a query string too. */
 export const Limit = z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT);
 

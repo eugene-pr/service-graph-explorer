@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -36,6 +36,157 @@ const detailRows = (details: HTMLElement) =>
   Object.fromEntries([...details.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
 
 describe('ExplorerPage', () => {
+  describe('Query URL', () => {
+    it('keeps unsubmitted Filter edits when only the view mode changes', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('2 Routes');
+      await user.click(screen.getByRole('checkbox', { name: 'hasVulnerability' }));
+      await user.selectOptions(screen.getByRole('combobox', { name: /minSeverity/ }), 'high');
+      await user.click(screen.getByRole('checkbox', { name: 'Matched only' }));
+
+      expect(screen.getByRole('checkbox', { name: 'hasVulnerability' })).toBeChecked();
+      expect(screen.getByRole('combobox', { name: /minSeverity/ })).toHaveValue('high');
+      expect(new URLSearchParams(window.location.search).has('filters')).toBe(false);
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+      expect(new URLSearchParams(window.location.search).get('hasVulnerability.minSeverity')).toBe('high');
+    });
+
+    it('restores Queries, parameter controls, results and view mode with Back and Forward', async () => {
+      const user = userEvent.setup();
+      server.use(http.get('*/api/routes', ({ request }) => HttpResponse.json(routesFixture(
+        new URL(request.url).searchParams.has('filters') ? [entryRoutes[0]!] : entryRoutes,
+      ))));
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('2 Routes');
+      await user.click(screen.getByRole('checkbox', { name: 'maxLength' }));
+      await user.type(screen.getByRole('spinbutton', { name: 'hops' }), '2');
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+      await screen.findByText('1 Route');
+      await user.click(screen.getByRole('checkbox', { name: 'Matched only' }));
+
+      const navigate = async (direction: 'back' | 'forward') => {
+        await act(() => new Promise<void>((resolve) => {
+          window.addEventListener('popstate', () => resolve(), { once: true });
+          window.history[direction]();
+        }));
+      };
+      await navigate('back');
+      expect(screen.getByRole('checkbox', { name: 'Matched only' })).not.toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'maxLength' })).toBeChecked();
+      await navigate('back');
+      await screen.findByText('2 Routes');
+      expect(screen.getByRole('checkbox', { name: 'maxLength' })).not.toBeChecked();
+      expect(window.location.search).toBe('');
+      await navigate('forward');
+      await screen.findByText('1 Route');
+      expect(screen.getByRole('checkbox', { name: 'maxLength' })).toBeChecked();
+      expect(screen.getByRole('spinbutton', { name: 'hops' })).toHaveValue(2);
+      await navigate('forward');
+      expect(screen.getByRole('checkbox', { name: 'Matched only' })).toBeChecked();
+      expect(window.location.search).toContain('view=matched');
+    });
+
+    it('runs the default Query from Entries on first load without URL params', async () => {
+      const requests: string[] = [];
+      server.use(http.get('*/api/routes', ({ request }) => {
+        requests.push(new URL(request.url).search);
+        return HttpResponse.json(routesFixture(entryRoutes));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+
+      await screen.findByText('2 Routes');
+      expect(requests).toEqual(['']);
+      expect(screen.getByRole('checkbox', { name: 'startsAtPublic' })).not.toBeChecked();
+      expect(screen.getByRole('spinbutton', { name: 'Limit' })).toHaveValue(100);
+    });
+
+    it('writes a changed Query and view to the URL, restores them on reload, and resets to defaults', async () => {
+      const user = userEvent.setup();
+      window.history.replaceState(null, '', '/explorer#graph');
+      const page = renderWithQueryClient(<ExplorerPage />);
+      await user.click(await screen.findByRole('checkbox', { name: 'passesThrough' }));
+      await user.type(screen.getByRole('textbox', { name: 'node' }), 'auth-service');
+      fireEvent.change(screen.getByRole('spinbutton', { name: 'Limit' }), { target: { value: '7' } });
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+      await screen.findByText('2 Routes');
+      await user.click(screen.getByRole('checkbox', { name: 'Matched only' }));
+
+      const search = new URLSearchParams(window.location.search);
+      expect(search.get('filters')).toBe('passesThrough');
+      expect(search.get('passesThrough.node')).toBe('auth-service');
+      expect(search.get('limit')).toBe('7');
+      expect(search.get('view')).toBe('matched');
+      expect(window.location.pathname).toBe('/explorer');
+      expect(window.location.hash).toBe('#graph');
+      page.unmount();
+      renderWithQueryClient(<ExplorerPage />);
+
+      expect(await screen.findByRole('textbox', { name: 'node' })).toHaveValue('auth-service');
+      expect(screen.getByRole('checkbox', { name: 'Matched only' })).toBeChecked();
+      await user.click(screen.getByRole('button', { name: 'Reset' }));
+      expect(window.location.search).toBe('');
+      expect(screen.getByRole('checkbox', { name: 'passesThrough' })).not.toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'Matched only' })).not.toBeChecked();
+    });
+
+    it('opens a shared Query with Filters, params, limit and matched view, and runs it on first load', async () => {
+      window.history.replaceState(null, '', '/?filters=endsAtSink,hasVulnerability,maxLength&endsAtSink.kinds=rds&hasVulnerability.minSeverity=high&maxLength.hops=2&limit=7&view=matched');
+      const requests: URLSearchParams[] = [];
+      server.use(http.get('*/api/routes', ({ request }) => {
+        requests.push(new URL(request.url).searchParams);
+        return HttpResponse.json(routesFixture([entryRoutes[0]!], { limit: 7 }));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+
+      await screen.findByText('1 Route');
+      expect(requests[0]?.get('filters')).toBe('endsAtSink,hasVulnerability,maxLength');
+      expect(requests[0]?.get('endsAtSink.kinds')).toBe('rds');
+      expect(requests[0]?.get('hasVulnerability.minSeverity')).toBe('high');
+      expect(requests[0]?.get('maxLength.hops')).toBe('2');
+      expect(requests[0]?.get('limit')).toBe('7');
+      expect(requests[0]?.has('view')).toBe(false);
+      expect(screen.getByRole('checkbox', { name: 'endsAtSink' })).toBeChecked();
+      expect(screen.getByRole('combobox', { name: /minSeverity/ })).toHaveValue('high');
+      expect(screen.getByRole('spinbutton', { name: 'Limit' })).toHaveValue(7);
+      expect(screen.getByRole('checkbox', { name: 'Matched only' })).toBeChecked();
+      expect(screen.queryByRole('group', { name: 'assurance-service' })).not.toBeInTheDocument();
+    });
+
+    it.each([
+      'filters=retiredFilter',
+      'filters=startsAtPublic,startsAtPublic',
+      'filters=hasVulnerability&hasVulnerability.minSeverity=urgent',
+      'filters=maxLength&maxLength.hops=zero',
+      'filters=passesThrough',
+      'filters=endsAtSink&endsAtSink.retiredParam=rds',
+      'maxLength.hops=2',
+      'limit=1001',
+      'limit=broken',
+      'view=retiredView',
+      'filters=startsAtPublic&filters=endsAtSink',
+      'filters=maxLength&maxLength.hops=2&maxLength.hops=3',
+      'unknown=value',
+    ])('falls back to defaults with a non-blocking notice for ?%s', async (search) => {
+      window.history.replaceState(null, '', `/?${search}`);
+      const requests: string[] = [];
+      server.use(http.get('*/api/routes', ({ request }) => {
+        requests.push(new URL(request.url).search);
+        return HttpResponse.json(routesFixture(entryRoutes));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+
+      await screen.findByText('2 Routes');
+      expect(requests).toEqual(['']);
+      expect(screen.getByRole('status')).toHaveTextContent(/URL.*default Query/i);
+      expect(screen.getByRole('checkbox', { name: 'startsAtPublic' })).not.toBeChecked();
+      expect(screen.getByRole('spinbutton', { name: 'Limit' })).toHaveValue(100);
+      expect(screen.getByRole('checkbox', { name: 'Matched only' })).not.toBeChecked();
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Reset' }));
+      expect(window.location.search).toBe('');
+      expect(screen.queryByText(/URL.*default Query/i)).not.toBeInTheDocument();
+    });
+  });
   describe('Route highlights', () => {
     it('preserves selection after an error removes the hovered row and a retry restores it', async () => {
       const user = userEvent.setup();

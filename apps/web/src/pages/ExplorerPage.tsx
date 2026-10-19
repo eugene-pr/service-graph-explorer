@@ -12,6 +12,7 @@ import { GraphCanvas } from '../organisms/GraphCanvas';
 import { Legend } from '../organisms/Legend';
 import { NodeDetails } from '../organisms/NodeDetails';
 import { QueryPanel } from '../organisms/QueryPanel';
+import { QueryUrlNotice } from '../organisms/QueryUrlNotice';
 import { RouteList } from '../organisms/RouteList';
 import { useUiStore } from '../store/uiStore';
 import { ExplorerLayout } from '../templates/ExplorerLayout';
@@ -45,7 +46,10 @@ export function ExplorerPage() {
 
   return (
     <ExplorerLayout
-      banner={graph.data && <WarningsBanner warnings={graph.data.meta.warnings} />}
+      banner={<>
+        <QueryUrlNotice />
+        {graph.data && <WarningsBanner warnings={graph.data.meta.warnings} />}
+      </>}
       sidebar={
         <>
           {catalog.isPending ? (
