@@ -13,9 +13,7 @@ export function useQueryState() {
   return useMemo(
     () => ({
       query,
-      setFilters: (filters: string[]) => setQuery((q) => ({ ...q, filters })),
-      setParams: (params: FlatQuery['params']) => setQuery((q) => ({ ...q, params })),
-      setLimit: (limit: number) => setQuery((q) => ({ ...q, limit })),
+      setQuery,
       reset: () => setQuery(DEFAULT_QUERY),
     }),
     [query],

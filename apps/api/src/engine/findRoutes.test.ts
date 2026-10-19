@@ -307,6 +307,32 @@ describe('hasVulnerability', () => {
   });
 });
 
+describe('passesThrough', () => {
+  it('matches the Routes that include the node, wherever it is on them', () => {
+    expect(findRoutes(graph, { and: [{ filter: 'passesThrough', params: { node: 'b' } }] }, { limit: 100 }).routes).toEqual([
+      ['a', 'b', 'db'],
+      ['x', 'b', 'db'],
+    ]);
+    expect(findRoutes(graph, { and: [{ filter: 'passesThrough', params: { node: 'a' } }] }, { limit: 100 }).routes).toEqual([
+      ['a', 'b', 'db'],
+      ['a', 'c', 'db'],
+    ]);
+  });
+
+  it('rejects a node not in the graph, naming the Filter and param', () => {
+    const errors = errorsOf({ and: [{ filter: 'passesThrough', params: { node: 'nope' } }] });
+
+    expect(errors).toMatchObject([{ filter: 'passesThrough', param: 'node' }]);
+    expect(errors[0]?.message).toMatch(/"nope"/);
+  });
+
+  it('rejects a missing or empty node, naming the Filter and param', () => {
+    for (const params of [{}, { node: '' }]) {
+      expect(errorsOf({ and: [{ filter: 'passesThrough', params }] })).toMatchObject([{ filter: 'passesThrough', param: 'node' }]);
+    }
+  });
+});
+
 describe('pruning', () => {
   /** Checks the last node's kind as a whole-Route Filter, which never drives pruning: an unpruned twin of `endsAtSink`. */
   const filters = createFilters(

@@ -22,6 +22,10 @@ export const implementations: FilterImplementations<typeof filterCatalog> = {
     const atLeast = SEVERITIES.indexOf(minSeverity ?? 'unknown');
     return { node: (node) => node.vulnerabilities.some(({ severity }) => SEVERITIES.indexOf(severity) >= atLeast) };
   },
+  passesThrough: ({ node }, graph) => {
+    if (!graph.node(node)) return { mismatches: [{ param: 'node', message: `Node "${node}" is not in the graph.` }] };
+    return { node: (candidate) => candidate.name === node };
+  },
 };
 
 /** Every Filter in the Filter Catalog, with its check. */

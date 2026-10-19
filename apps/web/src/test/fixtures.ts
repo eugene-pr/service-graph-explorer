@@ -13,6 +13,7 @@ export const graphFixture: GraphResponse = {
         name: 'auth-service',
         kind: 'service',
         language: 'java',
+        path: 'services/auth',
         publicExposed: false,
         vulnerabilities: [
           { file: 'Auth.java', severity: 'medium', message: 'SQL injection', metadata: { cwe: 'CWE-89' } },
@@ -81,7 +82,7 @@ export const filtersFixture: FiltersResponse = {
       },
     },
     {
-      name: 'passesThroughFixture',
+      name: 'passesThrough',
       description: 'Passes through the named node.',
       position: 'any',
       params: { type: 'object', properties: { node: { type: 'string' } }, required: ['node'], additionalProperties: false },

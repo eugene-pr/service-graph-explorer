@@ -12,3 +12,11 @@ export function toSearchParams({ filters, params, limit }: FlatQuery): URLSearch
   if (limit !== DEFAULT_LIMIT) queryString.set('limit', String(limit));
   return queryString;
 }
+
+/**
+ * `filters` with `name` turned on or off, in `order` (the Filter Catalog's names), so the same Filters always make the same Query.
+ * Names not in `order` keep their place after it, and none repeats.
+ */
+export function withFilter(filters: readonly string[], name: string, on: boolean, order: readonly string[] = []): string[] {
+  return [...new Set([...order, ...filters, name])].filter((n) => (n === name ? on : filters.includes(n)));
+}

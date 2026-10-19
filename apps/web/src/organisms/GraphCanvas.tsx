@@ -1,5 +1,5 @@
 import type { GraphResponse } from '@sge/domain';
-import { Background, Controls, MarkerType, ReactFlow, type Edge } from '@xyflow/react';
+import { Background, Controls, MarkerType, ReactFlow, type Edge, type NodeChange } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useMemo } from 'react';
 import type { Highlight } from '../lib/highlight';
@@ -12,6 +12,9 @@ interface GraphCanvasProps {
   graph: GraphResponse;
   /** Matched nodes and edges; everything else is dimmed. None: nothing is dimmed. */
   highlight?: Highlight | undefined;
+  /** Name of the selected node. */
+  selectedNode?: string | undefined;
+  onSelectNode: (name: string | undefined) => void;
 }
 
 const edgeStyles = {
@@ -20,7 +23,7 @@ const edgeStyles = {
   dimmed: { opacity: 0.15 },
 };
 
-export function GraphCanvas({ graph, highlight }: GraphCanvasProps) {
+export function GraphCanvas({ graph, highlight, selectedNode, onSelectNode }: GraphCanvasProps) {
   const laidOut = useMemo(() => {
     const positions = layoutTopDown(
       graph.nodes.map((n) => n.id),
@@ -43,6 +46,7 @@ export function GraphCanvas({ graph, highlight }: GraphCanvasProps) {
   const { nodes, edges } = useMemo(() => {
     const nodes = laidOut.nodes.map((node) => ({
       ...node,
+      selected: node.id === selectedNode,
       data: { ...node.data, highlighted: highlight && highlight.nodes.has(node.id) },
     }));
     const edges: Edge[] = laidOut.edges.map((edge) => {
@@ -55,7 +59,7 @@ export function GraphCanvas({ graph, highlight }: GraphCanvasProps) {
       };
     });
     return { nodes, edges };
-  }, [laidOut, highlight]);
+  }, [laidOut, highlight, selectedNode]);
 
   return (
     <section aria-label="Service graph" className="size-full">
@@ -63,6 +67,10 @@ export function GraphCanvas({ graph, highlight }: GraphCanvasProps) {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        onNodesChange={(changes) => {
+          const next = selectionAfter(changes, selectedNode);
+          if (next !== selectedNode) onSelectNode(next);
+        }}
         nodesDraggable={false}
         nodesConnectable={false}
         minZoom={0.1}
@@ -74,4 +82,12 @@ export function GraphCanvas({ graph, highlight }: GraphCanvasProps) {
       </ReactFlow>
     </section>
   );
+}
+
+/** Selection is controlled: React Flow reports clicks, Enter and Escape on nodes as `select` changes. */
+function selectionAfter(changes: NodeChange<ServiceFlowNode>[], current: string | undefined): string | undefined {
+  const selects = changes.filter((change) => change.type === 'select');
+  const selected = selects.find((change) => change.selected);
+  if (selected) return selected.id;
+  return selects.some((change) => change.id === current) ? undefined : current;
 }

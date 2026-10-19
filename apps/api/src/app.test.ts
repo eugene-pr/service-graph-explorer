@@ -33,7 +33,7 @@ describe('GET /api/filters', () => {
 
     expect(res.statusCode).toBe(200);
     const { filters } = FiltersResponse.parse(res.json());
-    expect(filters.map((f) => f.name)).toEqual(['startsAtEntry', 'startsAtPublic', 'endsAtSink', 'hasVulnerability', 'visits', 'endsAtKind', 'maxHops']);
+    expect(filters.map((f) => f.name)).toEqual(['startsAtEntry', 'startsAtPublic', 'endsAtSink', 'hasVulnerability', 'passesThrough', 'visits', 'endsAtKind', 'maxHops']);
     expect(filters.find((f) => f.name === 'visits')).toMatchObject({
       description: 'Passes through the named node.',
       position: 'any',
@@ -109,6 +109,7 @@ describe('GET /api/routes', () => {
     ['a param for a Filter not in `filters`', '?visits.node=db', [{ filter: 'visits', param: 'node' }]],
     ['an empty sink kind in a list', '?filters=endsAtSink&endsAtSink.kinds=rds,,sqs', [{ filter: 'endsAtSink', param: 'kinds' }]],
     ['a sink kind not in the graph', '?filters=endsAtSink&endsAtSink.kinds=rds,mongo', [{ filter: 'endsAtSink', param: 'kinds' }]],
+    ['a passesThrough node not in the graph', '?filters=passesThrough&passesThrough.node=nope', [{ filter: 'passesThrough', param: 'node' }]],
     ['a repeated Filter', '?filters=startsAtPublic,startsAtPublic', [{ filter: 'startsAtPublic' }]],
     ['a limit over the maximum', '?limit=1001', [{ param: 'limit' }]],
     ['a limit that is not a number', '?limit=lots', [{ param: 'limit' }]],

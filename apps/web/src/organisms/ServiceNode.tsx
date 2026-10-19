@@ -17,7 +17,7 @@ export type ServiceFlowNode = Node<
   'service'
 >;
 
-export function ServiceNode({ data: { node, sink, highlighted } }: NodeProps<ServiceFlowNode>) {
+export function ServiceNode({ data: { node, sink, highlighted }, selected }: NodeProps<ServiceFlowNode>) {
   const severity = highestSeverity(node);
   const vulnCount = node.vulnerabilities.length;
 
@@ -27,13 +27,14 @@ export function ServiceNode({ data: { node, sink, highlighted } }: NodeProps<Ser
       data-sink={sink}
       data-inferred={node.inferred}
       data-highlighted={highlighted}
+      data-selected={selected}
       className={`size-full transition-opacity ${highlighted === false ? 'opacity-25' : ''}`}
     >
       <Handle type="target" position={Position.Top} className="opacity-0" />
       <NodeShape
         sink={sink}
         inferred={node.inferred}
-        className={`flex size-full flex-col items-center justify-center gap-1 px-3 shadow-sm ${highlighted ? 'ring-2 ring-indigo-600 ring-offset-1' : ''}`}
+        className={`flex size-full flex-col items-center justify-center gap-1 px-3 shadow-sm ${selected ? 'ring-4 ring-amber-500 ring-offset-1' : highlighted ? 'ring-2 ring-indigo-600 ring-offset-1' : ''}`}
       >
         <span className="max-w-full truncate text-sm font-medium text-slate-900" title={node.name}>
           {node.name}

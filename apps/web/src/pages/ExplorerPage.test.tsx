@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -14,6 +14,15 @@ const findNode = async (name: string) => {
   if (!node) throw new Error(`Node "${name}" has no [data-node] element`);
   return node;
 };
+
+/** A plain click: user-event's mousedown has no `view` in jsdom, which the canvas's pan handler (d3-zoom) reads. */
+const clickNode = async (name: string) => fireEvent.click(await findNode(name));
+
+const nodeDetails = () => screen.getByRole('region', { name: /node details/i });
+
+/** The details panel's fields as label → value. */
+const detailRows = (details: HTMLElement) =>
+  Object.fromEntries([...details.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
 
 describe('ExplorerPage', () => {
   it('renders every node of the graph with text-labelled badges', async () => {
@@ -87,6 +96,51 @@ describe('ExplorerPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't load the graph/i);
   });
 
+  describe('node details', () => {
+    it('clicking a node shows all its data in the details panel', async () => {
+      renderWithQueryClient(<ExplorerPage />);
+      expect(screen.queryByRole('region', { name: /node details/i })).not.toBeInTheDocument();
+
+      await clickNode('auth-service');
+
+      const details = nodeDetails();
+      expect(within(details).getByRole('heading', { name: 'auth-service' })).toBeInTheDocument();
+      expect(detailRows(details)).toEqual({ Kind: 'service', Language: 'java', Path: 'services/auth', Public: 'no', Inferred: 'no' });
+      const vulnerabilities = within(details).getAllByRole('listitem').map((li) => li.textContent);
+      expect(vulnerabilities).toEqual([
+        expect.stringMatching(/medium.*SQL injection.*Auth\.java.*CWE-89/),
+        expect.stringMatching(/high.*Path traversal.*Auth\.java.*CWE-22/),
+      ]);
+      expect(await findNode('auth-service')).toHaveAttribute('data-selected', 'true');
+    });
+
+    it('shows an Inferred Node with no vulnerabilities as such', async () => {
+      renderWithQueryClient(<ExplorerPage />);
+
+      await clickNode('assurance-service');
+
+      const details = nodeDetails();
+      expect(detailRows(details)).toMatchObject({ Kind: 'service', Public: 'no', Inferred: 'yes' });
+      expect(within(details).getByText(/no vulnerabilities/i)).toBeInTheDocument();
+    });
+
+    it('selects a node with the keyboard, and closes the panel with its close button', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<ExplorerPage />);
+      const canvas = await screen.findByRole('region', { name: /service graph/i });
+
+      within(canvas).getByRole('group', { name: 'frontend' }).focus();
+      await user.keyboard('{Enter}');
+
+      const details = nodeDetails();
+      expect(within(details).getByRole('heading', { name: 'frontend' })).toBeInTheDocument();
+      expect(detailRows(details)).toMatchObject({ Public: 'yes' });
+
+      await user.click(within(details).getByRole('button', { name: /close node details/i }));
+      expect(screen.queryByRole('region', { name: /node details/i })).not.toBeInTheDocument();
+    });
+  });
+
   describe('Query', () => {
     /** Answers `/api/routes` with `respond(searchParams)` and records each request's search params. */
     const recordRoutesRequests = (respond: (params: URLSearchParams) => string[][] = () => entryRoutes) => {
@@ -119,7 +173,7 @@ describe('ExplorerPage', () => {
       renderWithQueryClient(<ExplorerPage />);
 
       const panel = await screen.findByRole('form', { name: /query/i });
-      for (const name of ['startsAtEntry', 'startsAtPublic', 'passesThroughFixture']) {
+      for (const name of ['startsAtEntry', 'startsAtPublic', 'passesThrough']) {
         expect(await within(panel).findByRole('checkbox', { name })).not.toBeChecked();
       }
       expect(within(panel).getByText('Starts at a publicly exposed service.')).toBeInTheDocument();
@@ -148,13 +202,13 @@ describe('ExplorerPage', () => {
       const requests = recordRoutesRequests();
       renderWithQueryClient(<ExplorerPage />);
 
-      await user.click(await screen.findByRole('checkbox', { name: 'passesThroughFixture' }));
+      await user.click(await screen.findByRole('checkbox', { name: 'passesThrough' }));
       await user.type(screen.getByRole('textbox', { name: 'node' }), 'auth-service');
       await user.click(screen.getByRole('button', { name: /run/i }));
 
       await screen.findByText('2 Routes');
-      await vi.waitFor(() => expect(requests.at(-1)?.get('filters')).toBe('passesThroughFixture'));
-      expect(requests.at(-1)?.get('passesThroughFixture.node')).toBe('auth-service');
+      await vi.waitFor(() => expect(requests.at(-1)?.get('filters')).toBe('passesThrough'));
+      expect(requests.at(-1)?.get('passesThrough.node')).toBe('auth-service');
     });
 
     it('lists the graph\'s node kinds for endsAtSink, sending the checked ones, or none for the default', async () => {
@@ -273,6 +327,69 @@ describe('ExplorerPage', () => {
       expect(await findNode('frontend')).toHaveAttribute('data-highlighted', 'true');
     });
 
+    it('"Show Routes through here" adds passesThrough for the selected node to the current Query and runs it', async () => {
+      const user = userEvent.setup();
+      const requests = recordRoutesRequests((params) =>
+        params.get('filters')?.includes('passesThrough') ? [['frontend', 'auth-service', 'prod-postgresdb']] : entryRoutes,
+      );
+      renderWithQueryClient(<ExplorerPage />);
+      await user.click(await screen.findByRole('checkbox', { name: 'startsAtPublic' }));
+      await user.click(screen.getByRole('button', { name: /run/i }));
+      await vi.waitFor(() => expect(requests.at(-1)?.get('filters')).toBe('startsAtPublic'));
+
+      await clickNode('auth-service');
+      await user.click(within(nodeDetails()).getByRole('button', { name: /show routes through here/i }));
+
+      const list = await routeList();
+      expect(await within(list).findByText('1 Route')).toBeInTheDocument();
+      expect(requests.at(-1)?.get('filters')).toBe('startsAtPublic,passesThrough');
+      expect(requests.at(-1)?.get('passesThrough.node')).toBe('auth-service');
+      expect(screen.getByRole('checkbox', { name: 'passesThrough' })).toBeChecked();
+      expect(screen.getByRole('textbox', { name: 'node' })).toHaveValue('auth-service');
+    });
+
+    it('"Show Routes through here" replaces the node, never repeating passesThrough, even without the Filter Catalog', async () => {
+      const user = userEvent.setup();
+      server.use(http.get('*/api/filters', () => HttpResponse.json({ title: 'boom' }, { status: 500 })));
+      const requests = recordRoutesRequests();
+      renderWithQueryClient(<ExplorerPage />);
+      const showRoutesThrough = () => within(nodeDetails()).getByRole('button', { name: /show routes through here/i });
+
+      await clickNode('auth-service');
+      await user.click(showRoutesThrough());
+      await vi.waitFor(() => expect(requests.at(-1)?.get('passesThrough.node')).toBe('auth-service'));
+      await clickNode('frontend');
+      await user.click(showRoutesThrough());
+
+      await vi.waitFor(() => expect(requests.at(-1)?.get('passesThrough.node')).toBe('frontend'));
+      expect(requests.at(-1)?.get('filters')).toBe('passesThrough');
+    });
+
+    it('"Show Routes through here" runs the Query again when it is unchanged, so a failed Query can be retried', async () => {
+      const user = userEvent.setup();
+      let failing = true;
+      server.use(
+        http.get('*/api/routes', ({ request }) =>
+          failing && new URL(request.url).searchParams.has('passesThrough.node')
+            ? HttpResponse.json({ type: 'about:blank', title: 'Internal Server Error', status: 500 }, { status: 500 })
+            : HttpResponse.json(routesFixture(entryRoutes)),
+        ),
+      );
+      renderWithQueryClient(<ExplorerPage />);
+      const list = await routeList();
+      await within(list).findByText('2 Routes');
+
+      await clickNode('auth-service');
+      await user.click(within(nodeDetails()).getByRole('button', { name: /show routes through here/i }));
+      await within(list).findByRole('alert');
+
+      failing = false;
+      await user.click(within(nodeDetails()).getByRole('button', { name: /show routes through here/i }));
+
+      expect(await within(list).findByText('2 Routes')).toBeInTheDocument();
+      expect(within(list).queryByRole('alert')).not.toBeInTheDocument();
+    });
+
     it('shows the problems when the API rejects the Query', async () => {
       server.use(
         http.get('*/api/routes', () =>
@@ -282,7 +399,7 @@ describe('ExplorerPage', () => {
               title: 'Bad Request',
               status: 400,
               detail: 'The Query is invalid.',
-              errors: [{ filter: 'passesThroughFixture', param: 'node', message: 'Too small' }],
+              errors: [{ filter: 'passesThrough', param: 'node', message: 'Too small' }],
             },
             { status: 400, headers: { 'Content-Type': 'application/problem+json' } },
           ),
@@ -292,7 +409,7 @@ describe('ExplorerPage', () => {
 
       const alert = await within(await routeList()).findByRole('alert');
       expect(alert).toHaveTextContent('The Query is invalid.');
-      expect(alert).toHaveTextContent('passesThroughFixture.node: Too small');
+      expect(alert).toHaveTextContent('passesThrough.node: Too small');
     });
   });
 });

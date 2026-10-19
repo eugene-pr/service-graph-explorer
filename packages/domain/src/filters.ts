@@ -52,6 +52,13 @@ export const filterCatalog = {
         .meta({ description: 'Lowest severity that counts; unknown never does. Default: any vulnerability, including unknown.' }),
     }),
   },
+  passesThrough: {
+    description: 'Passes through the named node.',
+    position: 'any',
+    params: z.strictObject({
+      node: z.string().min(1).meta({ description: 'Name of a node in the graph.' }),
+    }),
+  },
 } satisfies FilterCatalog;
 
 export type FilterName = keyof typeof filterCatalog;

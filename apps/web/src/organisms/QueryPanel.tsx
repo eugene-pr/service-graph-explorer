@@ -4,6 +4,7 @@ import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
 import { FilterToggle } from '../molecules/FilterToggle';
 import { ParamInput } from '../molecules/ParamInput';
+import { withFilter } from '../lib/queryString';
 
 interface QueryPanelProps {
   /** The Filter Catalog; the panel is generated from it. */
@@ -21,14 +22,16 @@ interface QueryPanelProps {
 /** Edits a draft Query; nothing runs until Run. */
 export function QueryPanel({ filters, query, defaultQuery, nodeKinds, onRun, onReset }: QueryPanelProps) {
   const [draft, setDraft] = useState(query);
+  // A new Query, run from here or set from outside (e.g. "Show Routes through here"), replaces the draft.
+  const [shown, setShown] = useState(query);
+  if (query !== shown) {
+    setShown(query);
+    setDraft(query);
+  }
   const active = new Set(draft.filters);
 
   const toggle = (name: string, on: boolean) =>
-    setDraft((d) => ({
-      ...d,
-      // Keep catalog order, so the same Filters always make the same Query.
-      filters: filters.map((f) => f.name).filter((n) => (n === name ? on : d.filters.includes(n))),
-    }));
+    setDraft((d) => ({ ...d, filters: withFilter(d.filters, name, on, filters.map((f) => f.name)) }));
   const setParam = (filter: string, param: string, value: string) =>
     setDraft((d) => ({ ...d, params: { ...d.params, [filter]: { ...d.params[filter], [param]: value } } }));
 

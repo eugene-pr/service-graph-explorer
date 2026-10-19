@@ -1,4 +1,4 @@
-import type { ProblemError } from '@sge/domain';
+import type { FilterName, FlatQuery, ProblemError } from '@sge/domain';
 import { useMemo } from 'react';
 import { ApiError } from '../api/client';
 import { Spinner } from '../atoms/Spinner';
@@ -7,13 +7,17 @@ import { useGraph } from '../hooks/useGraph';
 import { DEFAULT_QUERY, useQueryState } from '../hooks/useQueryState';
 import { useRoutes } from '../hooks/useRoutes';
 import { highlightOf } from '../lib/highlight';
-import { toSearchParams } from '../lib/queryString';
+import { toSearchParams, withFilter } from '../lib/queryString';
 import { WarningsBanner } from '../molecules/WarningsBanner';
 import { GraphCanvas } from '../organisms/GraphCanvas';
 import { Legend } from '../organisms/Legend';
+import { NodeDetails } from '../organisms/NodeDetails';
 import { QueryPanel } from '../organisms/QueryPanel';
 import { RouteList } from '../organisms/RouteList';
+import { useUiStore } from '../store/uiStore';
 import { ExplorerLayout } from '../templates/ExplorerLayout';
+
+const PASSES_THROUGH = 'passesThrough' satisfies FilterName;
 
 const describeProblem = ({ filter, param, message }: ProblemError) =>
   `${[filter, param].filter(Boolean).join('.') || 'Query'}: ${message}`;
@@ -21,12 +25,21 @@ const describeProblem = ({ filter, param, message }: ProblemError) =>
 export function ExplorerPage() {
   const graph = useGraph();
   const catalog = useFilterCatalog();
-  const { query, setFilters, setParams, setLimit, reset } = useQueryState();
+  const { query, setQuery, reset } = useQueryState();
   const routes = useRoutes(query);
+  const selectedNode = useUiStore((s) => s.selectedNode);
+  const selectNode = useUiStore((s) => s.selectNode);
+  const selected = selectedNode === undefined ? undefined : graph.data?.nodes.find((n) => n.id === selectedNode)?.data;
 
   // Placeholder data is the previous Query's result: don't present it as this Query's matches.
   const current = routes.isError || routes.isPlaceholderData ? undefined : routes.data;
   const highlight = useMemo(() => current && highlightOf(current), [current]);
+  const runQuery = (next: FlatQuery) => {
+    // Same Query: same cache key, so setting it again wouldn't refetch. Run it again explicitly.
+    if (toSearchParams(next).toString() === toSearchParams(query).toString()) void routes.refetch();
+    else setQuery(next);
+  };
+
   const routesError = routes.error && {
     message: `Couldn't run the Query: ${routes.error.message}`,
     details: routes.error instanceof ApiError ? (routes.error.problem?.errors ?? []).map(describeProblem) : [],
@@ -51,16 +64,7 @@ export function ExplorerPage() {
               query={query}
               defaultQuery={DEFAULT_QUERY}
               nodeKinds={graph.data?.meta.kinds}
-              onRun={(next) => {
-                // Same Query: same cache key, so setting it again wouldn't refetch. Run it again explicitly.
-                if (toSearchParams(next).toString() === toSearchParams(query).toString()) {
-                  void routes.refetch();
-                  return;
-                }
-                setFilters(next.filters);
-                setParams(next.params);
-                setLimit(next.limit);
-              }}
+              onRun={runQuery}
               onReset={reset}
             />
           )}
@@ -77,7 +81,7 @@ export function ExplorerPage() {
             Couldn't load the graph: {graph.error.message}
           </p>
         ) : (
-          <GraphCanvas graph={graph.data} highlight={highlight} />
+          <GraphCanvas graph={graph.data} highlight={highlight} selectedNode={selectedNode} onSelectNode={selectNode} />
         )
       }
       aside={<RouteList
@@ -86,6 +90,21 @@ export function ExplorerPage() {
           isUpdating={routes.isPlaceholderData}
           error={routesError ?? undefined}
         />}
+      bottom={
+        selected && (
+          <NodeDetails
+            node={selected}
+            onClose={() => selectNode(undefined)}
+            onShowRoutesThrough={() =>
+              runQuery({
+                ...query,
+                filters: withFilter(query.filters, PASSES_THROUGH, true, catalog.data?.filters.map((f) => f.name)),
+                params: { ...query.params, [PASSES_THROUGH]: { node: selected.name } },
+              })
+            }
+          />
+        )
+      }
     />
   );
 }
