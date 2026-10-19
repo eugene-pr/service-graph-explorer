@@ -13,6 +13,11 @@ export function toSearchParams({ filters, params, limit }: FlatQuery): URLSearch
   return queryString;
 }
 
+/** `query` narrowed to `filter` alone, keeping its params and the limit. */
+export function onlyFilter(query: FlatQuery, filter: string): FlatQuery {
+  return { filters: [filter], params: { [filter]: query.params[filter] ?? {} }, limit: query.limit };
+}
+
 /**
  * `filters` with `name` turned on or off, in `order` (the Filter Catalog's names), so the same Filters always make the same Query.
  * Names not in `order` keep their place after it, and none repeats.

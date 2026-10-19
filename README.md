@@ -43,9 +43,9 @@ The default Query runs on first load and lists Routes starting at Entries. Run a
 
 While a new Query runs, the previous Routes are labelled as updating and their highlight is removed until the current results arrive. Clicking a graph node still opens its details independently of Route selection.
 
-When no Routes match, the Route list explains the empty result and suggests removing a Filter. Each active Filter has a hint showing how many Routes it matches on its own, using its current parameters and the current limit. These requests run in parallel through TanStack Query against the same `GET /api/routes` endpoint and share the normal Route cache. Counts marked **At least** were truncated by the limit; an unavailable count is labelled separately from zero. The engine's default Entry constraint still applies when a Filter does not set a starting position.
+When no Routes match, the Route list explains the empty result and suggests removing a Filter. Each active Filter has a hint showing how many Routes it matches on its own, using its current parameters and the current limit. These requests run in parallel through TanStack Query against the same `GET /api/routes` endpoint and share the normal Route cache. Counts marked **At least** were truncated by the limit; an unavailable count is labelled separately from zero. The engine's default Entry constraint still applies when a Filter does not set a starting position, and such hints say **from Entries**.
 
-Click a hint to apply just that Filter, keeping its parameters, the limit and view mode. The URL, Query panel and results update together. Hints appear only for the current Query's confirmed empty result. With no active Filters, the empty state suggests choosing a start Filter instead. All empty-state copy applies to any graph file.
+Click a hint to apply just that Filter, keeping its parameters, the limit and view mode. The URL, Query panel and results update together. Hints appear only for the current Query's confirmed empty result. With a single active Filter, the empty state suggests changing its parameters or removing it, with no hint. With no active Filters, it suggests choosing a start-position Filter instead. All empty-state copy applies to any graph file.
 
 ## State and rendering
 

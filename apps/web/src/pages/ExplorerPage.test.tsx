@@ -35,13 +35,19 @@ const findEdge = async (id: string) => {
 const detailRows = (details: HTMLElement) =>
   Object.fromEntries([...details.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
 
+/** A promise the test resolves by hand, to hold MSW responses back. */
+const deferred = () => {
+  let release = () => {};
+  const released = new Promise<void>((resolve) => (release = resolve));
+  return { released, release };
+};
+
 describe('ExplorerPage', () => {
   describe('empty results', () => {
     it('explains an empty Query and loads each active Filter count in parallel with its own params and limit', async () => {
       window.history.replaceState(null, '', '/?filters=startsAtPublic,endsAtSink,hasVulnerability&endsAtSink.kinds=rds&hasVulnerability.minSeverity=high&limit=2');
       const requests: URLSearchParams[] = [];
-      let release = () => {};
-      const released = new Promise<void>((resolve) => (release = resolve));
+      const { released, release } = deferred();
       server.use(http.get('*/api/routes', async ({ request }) => {
         const params = new URL(request.url).searchParams;
         const filter = params.get('filters');
@@ -68,7 +74,8 @@ describe('ExplorerPage', () => {
 
         expect(await within(list).findByRole('button', { name: /startsAtPublic only.*2 Routes/ })).toBeInTheDocument();
         expect(await within(list).findByRole('button', { name: /endsAtSink only.*1 Route/ })).toBeInTheDocument();
-        expect(await within(list).findByRole('button', { name: /hasVulnerability only.*0 Routes/ })).toBeInTheDocument();
+        expect(await within(list).findByRole('button', { name: /hasVulnerability only, from Entries.*0 Routes/ })).toBeInTheDocument();
+        expect(within(list).getByRole('button', { name: /startsAtPublic only:/ })).toBeInTheDocument();
       } finally {
         release();
       }
@@ -120,7 +127,7 @@ describe('ExplorerPage', () => {
       expect(screen.getByText(/no Routes match this Query/i)).toBeInTheDocument();
     });
 
-    it.each(['/', '/?filters=hasVulnerability'])('explains an empty result without redundant count requests for %s', async (url) => {
+    const renderEmpty = async (url: string) => {
       window.history.replaceState(null, '', url);
       const requests: URLSearchParams[] = [];
       server.use(http.get('*/api/routes', ({ request }) => {
@@ -128,15 +135,21 @@ describe('ExplorerPage', () => {
         return HttpResponse.json(routesFixture([]));
       }));
       renderWithQueryClient(<ExplorerPage />);
-
       expect(await screen.findByText(/no Routes match this Query/i)).toBeInTheDocument();
-      const list = screen.getByRole('region', { name: 'Routes' });
-      if (url === '/') {
-        expect(within(list).queryByRole('button')).not.toBeInTheDocument();
-        expect(within(list).getByText(/try choosing a start Filter/i)).toBeInTheDocument();
-      } else {
-        expect(await within(list).findByRole('button', { name: /hasVulnerability only.*0 Routes/ })).toBeInTheDocument();
-      }
+      return { list: screen.getByRole('region', { name: 'Routes' }), requests };
+    };
+
+    it('suggests a start-position Filter when the default Query is empty', async () => {
+      const { list, requests } = await renderEmpty('/');
+      expect(within(list).queryByRole('button')).not.toBeInTheDocument();
+      expect(within(list).getByText(/try choosing a start-position Filter/i)).toBeInTheDocument();
+      expect(requests).toHaveLength(1);
+    });
+
+    it('suggests changing or removing the only Filter instead of offering it as a hint', async () => {
+      const { list, requests } = await renderEmpty('/?filters=hasVulnerability');
+      expect(within(list).getByText(/try changing this Filter's parameters or removing it/i)).toBeInTheDocument();
+      expect(within(list).queryByRole('button', { name: /only/ })).not.toBeInTheDocument();
       expect(requests).toHaveLength(1);
     });
 
@@ -144,8 +157,7 @@ describe('ExplorerPage', () => {
       const user = userEvent.setup();
       window.history.replaceState(null, '', '/?filters=startsAtPublic,endsAtSink');
       const requests: string[] = [];
-      let release = () => {};
-      const released = new Promise<void>((resolve) => (release = resolve));
+      const { released, release } = deferred();
       server.use(http.get('*/api/routes', async ({ request }) => {
         const filters = new URL(request.url).searchParams.get('filters') ?? '';
         requests.push(filters);
@@ -916,8 +928,7 @@ describe('ExplorerPage', () => {
 
     it('while a new Query runs, marks the previous Routes as updating and drops their highlight', async () => {
       const user = userEvent.setup();
-      let release = () => {};
-      const released = new Promise<void>((resolve) => (release = resolve));
+      const { released, release } = deferred();
       server.use(
         http.get('*/api/routes', async ({ request }) => {
           if (new URL(request.url).searchParams.get('filters') !== 'startsAtPublic') return HttpResponse.json(routesFixture(entryRoutes));

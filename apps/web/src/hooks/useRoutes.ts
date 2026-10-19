@@ -1,7 +1,7 @@
 import type { FlatQuery } from '@sge/domain';
 import { keepPreviousData, queryOptions, useQuery } from '@tanstack/react-query';
 import { fetchRoutes } from '../api/client';
-import { toSearchParams } from '../lib/queryString';
+import { onlyFilter, toSearchParams } from '../lib/queryString';
 
 export function routesQueryOptions(query: FlatQuery) {
   const queryString = toSearchParams(query);
@@ -14,4 +14,9 @@ export function routesQueryOptions(query: FlatQuery) {
 
 export function useRoutes(query: FlatQuery) {
   return useQuery({ ...routesQueryOptions(query), placeholderData: keepPreviousData });
+}
+
+/** Routes for `filter` alone from `query`, through the shared Route cache. */
+export function useFilterRoutes(query: FlatQuery, filter: string) {
+  return useQuery(routesQueryOptions(onlyFilter(query, filter)));
 }

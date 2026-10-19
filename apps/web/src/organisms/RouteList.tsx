@@ -2,6 +2,7 @@ import type { RoutesResponse } from '@sge/domain';
 import { useEffect, type ReactNode } from 'react';
 import { Spinner } from '../atoms/Spinner';
 import { RouteChip } from '../molecules/RouteChip';
+import { formatRouteCount } from '../lib/routeCount';
 import { routeKey } from '../lib/toFlowGraph';
 import { useUiStore } from '../store/uiStore';
 
@@ -61,7 +62,7 @@ export function RouteList({ result, isPending, isUpdating = false, error, emptyS
             </p>
           )}
           <p className="text-slate-700">
-            {result.meta.routeCount} {result.meta.routeCount === 1 ? 'Route' : 'Routes'}
+            {formatRouteCount(result.meta.routeCount)}
           </p>
           {result.meta.truncated && (
             <p role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950">
