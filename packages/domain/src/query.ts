@@ -13,17 +13,29 @@ export const Limit = z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAU
 export const FilterParams = z.record(z.string(), z.unknown());
 export type FilterParams = z.infer<typeof FilterParams>;
 
-export const FilterLeaf = z.object({ filter: z.string(), params: FilterParams.optional() });
+export const FilterLeaf = z.strictObject({ filter: z.string(), params: FilterParams.optional() });
 export type FilterLeaf = z.infer<typeof FilterLeaf>;
 
 export interface AndQuery {
   and: Query[];
 }
-/** A Filter, or an `and` of Queries: every member must hold. */
-export type Query = FilterLeaf | AndQuery;
+export interface OrQuery {
+  or: Query[];
+}
+export interface NotQuery {
+  not: Query;
+}
+/** A Filter, or Queries combined with `and` / `or` / `not`. */
+export type Query = FilterLeaf | AndQuery | OrQuery | NotQuery;
 
-export const AndQuery: z.ZodType<AndQuery> = z.object({ and: z.array(z.lazy(() => Query)) });
-export const Query: z.ZodType<Query> = z.union([FilterLeaf, AndQuery]).meta({ id: 'Query' });
+export const AndQuery: z.ZodType<AndQuery> = z.strictObject({ and: z.array(z.lazy(() => Query)) });
+export const OrQuery: z.ZodType<OrQuery> = z.strictObject({ or: z.array(z.lazy(() => Query)) });
+export const NotQuery: z.ZodType<NotQuery> = z.strictObject({ not: z.lazy(() => Query) });
+export const Query: z.ZodType<Query> = z.union([FilterLeaf, AndQuery, OrQuery, NotQuery]).meta({ id: 'Query' });
+
+/** JSON body for `POST /api/routes/query`. */
+export const RoutesQueryRequest = z.object({ query: Query, limit: Limit });
+export type RoutesQueryRequest = z.infer<typeof RoutesQueryRequest>;
 
 /**
  * A flat AND Query as the UI and the query string hold it.
@@ -58,6 +70,8 @@ export type RoutesResponse = z.infer<typeof RoutesResponse>;
 export const ProblemError = z.object({
   filter: z.string().optional(),
   param: z.string().optional(),
+  /** Filter position in the submitted tree, e.g. `query.and.0.or.1`. */
+  path: z.string().optional(),
   message: z.string(),
 });
 export type ProblemError = z.infer<typeof ProblemError>;

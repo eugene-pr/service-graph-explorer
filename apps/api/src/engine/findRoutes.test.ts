@@ -184,6 +184,81 @@ describe('findRoutes', () => {
   });
 });
 
+describe('Query trees', () => {
+  it.each<[Query, string[][]]>([
+    [{ filter: 'startsAtPublic' }, []],
+    [{ or: [{ filter: 'startsAtPublic' }, { filter: 'passesThrough', params: { node: 'b' } }] }, [['a', 'b', 'db']]],
+    [{ not: { filter: 'startsAtPublic' } }, [['a', 'b', 'db']]],
+    [{ and: [{ or: [{ filter: 'startsAtPublic' }, { filter: 'passesThrough', params: { node: 'b' } }] }] }, [['a', 'b', 'db']]],
+    [{ and: [{ and: [{ filter: 'startsAtPublic' }] }] }, []],
+  ])('adds the Entry default when a start Filter is not a direct top-level member: %j', (query, expected) => {
+    // `b` is public but is not an Entry, so considering its start Filter for candidates would admit a tail Route.
+    const nonEntryPublic = loadGraph({
+      nodes: [service('a'), service('b', true), { name: 'db', kind: 'rds' }],
+      edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'db' }],
+    });
+    const result = findRoutes(nonEntryPublic, query, { limit: 100 });
+
+    expect(result.meta.effectiveQuery).toEqual({ and: [{ filter: 'startsAtEntry' }, ...('and' in query ? query.and : [query])] });
+    expect(result.routes).toEqual(expected);
+  });
+
+  it('combines nested trees and repeated Filters without merging their params', () => {
+    const query = { and: [
+      { filter: 'startsAtPublic' },
+      { filter: 'passesThrough', params: { node: 'a' } },
+      { or: [
+        { and: [
+          { filter: 'passesThrough', params: { node: 'b' } },
+          { not: { filter: 'passesThrough', params: { node: 'c' } } },
+        ] },
+        { not: { not: { filter: 'passesThrough', params: { node: 'x' } } } },
+      ] },
+    ] };
+    const result = findRoutes(graph, query, { limit: 100 });
+
+    expect(result.routes).toEqual([['a', 'b', 'db']]);
+    expect(result.meta.effectiveQuery).toEqual(query);
+  });
+
+  it('validates every branch and identifies each Filter in the submitted tree', () => {
+    const query = {
+      and: [
+        { or: [
+          { filter: 'passesThrough', params: { node: 'db' } },
+          { filter: 'passesThrough', params: { node: 'missing' } },
+          { not: { filter: 'maxLength', params: { hops: 'two' } } },
+        ] },
+        { not: { filter: 'endsAtSink', params: { kinds: ['mongo'] } } },
+        { filter: 'nope' },
+      ],
+    };
+
+    expect(errorsOf(query)).toMatchObject([
+      { filter: 'passesThrough', param: 'node', path: 'query.and.0.or.1' },
+      { filter: 'maxLength', param: 'hops', path: 'query.and.0.or.2.not' },
+      { filter: 'endsAtSink', param: 'kinds', path: 'query.and.1.not' },
+      { filter: 'nope', path: 'query.and.2' },
+    ]);
+  });
+
+  it('negates a Filter with a `not` root and adds the Entry default', () => {
+    const query = { not: { filter: 'passesThrough', params: { node: 'b' } } };
+    const result = findRoutes(graph, query, { limit: 100 });
+
+    expect(result.routes).toEqual([['a', 'c', 'db']]);
+    expect(result.meta.effectiveQuery).toEqual({ and: [{ filter: 'startsAtEntry' }, query] });
+  });
+
+  it('matches either branch of an `or` and reports the added Entry default', () => {
+    const query = { or: [{ filter: 'passesThrough', params: { node: 'c' } }, { filter: 'passesThrough', params: { node: 'x' } }] };
+    const result = findRoutes(graph, query, { limit: 100 });
+
+    expect(result.routes).toEqual([['a', 'c', 'db'], ['x', 'b', 'db']]);
+    expect(result.meta.effectiveQuery).toEqual({ and: [{ filter: 'startsAtEntry' }, query] });
+  });
+});
+
 describe('endsAtSink', () => {
   // s -> api -> db(rds), q(sqs), cache(redis), leaf(service)
   const sinks = loadGraph({
@@ -349,6 +424,13 @@ describe('maxLength', () => {
   });
   const maxLength = (hops: unknown) => ({ filter: 'maxLength', params: { hops } });
 
+  it('keeps longer Routes when `maxLength` is inside `or` or `not`', () => {
+    expect(findRoutes(lengths, { and: [{ or: [maxLength(1), { filter: 'passesThrough', params: { node: 'n' } }] }] }, { limit: 100 }).routes)
+      .toEqual([['s', 'e1'], ['s', 'm', 'n', 'e3']]);
+    expect(findRoutes(lengths, { not: maxLength(1) }, { limit: 100 }).routes)
+      .toEqual([['s', 'm', 'e2'], ['s', 'm', 'n', 'e3']]);
+  });
+
   it.each([
     [1, [['s', 'e1']]],
     [2, [['s', 'e1'], ['s', 'm', 'e2']]],
@@ -430,6 +512,30 @@ describe('pruning', () => {
       { from: 'mid', to: ['db', 'm1'] },
       { from: 't', to: ['mid', 'q'] },
     ],
+  });
+
+  it.each([
+    {
+      name: 'or',
+      wrap: (end: Query): Query => ({ and: [{ or: [end, { filter: 'passesThrough', params: { node: 'dead' } }] }] }),
+      expected: [['s', 'dead', 'd1'], ['s', 'dead', 'd2'], ['s', 'dead', 'd3'], ['s', 'mid', 'db'], ['t', 'mid', 'db']],
+    },
+    {
+      name: 'not',
+      wrap: (end: Query): Query => ({ not: end }),
+      expected: [['s', 'dead', 'd1'], ['s', 'dead', 'd2'], ['s', 'dead', 'd3'], ['s', 'mid', 'm1'], ['t', 'mid', 'm1'], ['t', 'q']],
+    },
+  ])('never prunes using an end Filter inside $name, matching its unpruned twin', ({ wrap, expected }) => {
+    const query = wrap({ filter: 'endsAtSink', params: { kinds: ['rds'] } });
+    const unprunedQuery = wrap({ filter: 'endsAtKindUnpruned', params: { kinds: ['rds'] } });
+    for (const limit of [1, 2, 100]) {
+      const result = findRoutes(branching, query, { limit, filters });
+      const unpruned = findRoutes(branching, unprunedQuery, { limit, filters });
+
+      expect(result.routes).toEqual(expected.slice(0, limit));
+      expect(result.routes).toEqual(unpruned.routes);
+      expect(result.meta.truncated).toBe(unpruned.meta.truncated);
+    }
   });
 
   it.each([

@@ -1,6 +1,6 @@
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
-import { FiltersResponse, GraphResponse, HealthResponse, Limit, Problem, RoutesResponse } from '@sge/domain';
+import { FiltersResponse, GraphResponse, HealthResponse, Limit, Problem, RoutesQueryRequest, RoutesResponse } from '@sge/domain';
 import Fastify, { type FastifyServerOptions } from 'fastify';
 import {
   jsonSchemaTransform,
@@ -66,6 +66,17 @@ export function buildApp(graph: Graph, { filters = catalogFilters, ...options }:
         },
       },
       (request) => findRoutes(graph, parseFlatQuery(request.query, filters), { limit: request.query.limit, filters }),
+    );
+    api.post(
+      '/api/routes/query',
+      {
+        schema: {
+          description: 'Runs a Query tree of Filter leaves combined with `and`, `or` and `not`. Allows repeated Filters with separate params.',
+          body: RoutesQueryRequest,
+          response: { 200: RoutesResponse, 400: Problem },
+        },
+      },
+      (request) => findRoutes(graph, request.body.query, { limit: request.body.limit, filters }),
     );
     done();
   };

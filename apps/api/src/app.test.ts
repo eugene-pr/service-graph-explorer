@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FiltersResponse, Problem } from '@sge/domain';
+import { FiltersResponse, Problem, RoutesResponse } from '@sge/domain';
 import { z } from 'zod';
 import { buildApp } from './app.js';
 import { fixtureFilters } from './test/fixtureFilters.js';
@@ -126,6 +126,93 @@ describe('GET /api/routes', () => {
   });
 });
 
+describe('POST /api/routes/query', () => {
+  it.each([null, [], 'db', 42, true].map((params) => ({ params })))('locates a nested Filter with an invalid params container: %j', async ({ params }) => {
+    const res = await buildApp(graph).inject({ method: 'POST', url: '/api/routes/query', payload: {
+      query: { and: [{ or: [
+        { filter: 'startsAtPublic' },
+        { not: { filter: 'passesThrough', params } },
+      ] }] },
+    } });
+
+    expect(res.statusCode).toBe(400);
+    expect(Problem.parse(res.json()).errors).toMatchObject([
+      { filter: 'passesThrough', param: 'params', path: 'query.and.0.or.1.not' },
+    ]);
+  });
+
+  it.each([
+    ['a missing Query', {}],
+    ['a non-array or', { query: { or: { filter: 'startsAtEntry' } } }],
+    ['a null not member', { query: { not: null } }],
+    ['an invalid nested member', { query: { and: [{ or: [42] }] } }],
+    ['multiple operators', { query: { and: [], or: [] } }],
+    ['a leaf with an operator', { query: { filter: 'startsAtPublic', not: { filter: 'startsAtEntry' } } }],
+    ['an unknown operator', { query: { xor: [] } }],
+    ['an over-limit request', { query: { and: [] }, limit: 1001 }],
+  ])('returns 400 problem details for %s', async (_case, payload) => {
+    const res = await buildApp(graph).inject({ method: 'POST', url: '/api/routes/query', payload });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+    const problem = Problem.parse(res.json());
+    expect(problem).toMatchObject({ type: 'about:blank', title: 'Bad Request', status: 400 });
+    expect(problem.errors?.length).toBeGreaterThan(0);
+  });
+
+  it('accepts a nested JSON tree and serializes the effective Query with the default limit', async () => {
+    const app = buildApp(graph, { filters: fixtureFilters });
+    const query = { or: [
+      { and: [{ filter: 'visits', params: { node: 'web' } }, { not: { filter: 'visits', params: { node: 'missing' } } }] },
+      { not: { not: { filter: 'visits', params: { node: 'db' } } } },
+    ] };
+    const res = await app.inject({ method: 'POST', url: '/api/routes/query', payload: { query } });
+
+    expect(res.statusCode).toBe(200);
+    expect(RoutesResponse.parse(res.json()).meta).toMatchObject({
+      limit: 100,
+      effectiveQuery: { and: [{ filter: 'startsAtEntry' }, query] },
+    });
+  });
+
+  it('returns RFC 7807 errors with positions in the submitted tree, including repeated Filters', async () => {
+    const res = await buildApp(graph).inject({ method: 'POST', url: '/api/routes/query', payload: {
+      query: { or: [
+        { filter: 'passesThrough', params: { node: 'web' } },
+        { filter: 'passesThrough', params: { node: 'typo' } },
+        { and: [
+          { not: { filter: 'maxLength', params: { hops: 'two' } } },
+          { filter: 'endsAtSink', params: { kinds: ['mongo'] } },
+          { filter: 'nope' },
+        ] },
+      ] },
+    } });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+    const problem = Problem.parse(res.json());
+    expect(problem).toMatchObject({ type: 'about:blank', title: 'Bad Request', status: 400 });
+    expect(problem.errors).toMatchObject([
+      { filter: 'passesThrough', param: 'node', path: 'query.or.1' },
+      { filter: 'maxLength', param: 'hops', path: 'query.or.2.and.0.not' },
+      { filter: 'endsAtSink', param: 'kinds', path: 'query.or.2.and.1' },
+      { filter: 'nope', path: 'query.or.2.and.2' },
+    ]);
+  });
+
+  it('returns the same response as GET for an equivalent flat Query', async () => {
+    const app = buildApp(graph, { filters: fixtureFilters });
+    const get = await app.inject({ method: 'GET', url: '/api/routes?filters=startsAtPublic,visits&visits.node=db&limit=1' });
+    const post = await app.inject({ method: 'POST', url: '/api/routes/query', payload: {
+      query: { and: [{ filter: 'startsAtPublic' }, { filter: 'visits', params: { node: 'db' } }] },
+      limit: 1,
+    } });
+
+    expect(post.statusCode).toBe(200);
+    expect(post.json()).toEqual(get.json());
+  });
+});
+
 describe('errors', () => {
   it('returns 404 problem details for an unknown path', async () => {
     const res = await buildApp(graph).inject({ method: 'GET', url: '/api/nope' });
@@ -148,7 +235,8 @@ describe('API docs', () => {
     const doc = z
       .looseObject({ paths: z.record(z.string(), z.unknown()), components: z.object({ schemas: z.record(z.string(), z.unknown()) }) })
       .parse(spec.json());
-    expect(Object.keys(doc.paths)).toEqual(expect.arrayContaining(['/api/graph', '/api/filters', '/api/routes']));
+    expect(Object.keys(doc.paths)).toEqual(expect.arrayContaining(['/api/graph', '/api/filters', '/api/routes', '/api/routes/query']));
+    expect(doc.paths['/api/routes/query']).toHaveProperty(['post', 'requestBody', 'content', 'application/json', 'schema']);
     const refs = [...spec.body.matchAll(/"#\/components\/schemas\/([^"]+)"/g)].map(([, name]) => name ?? '');
     for (const name of refs) expect(doc.components.schemas).toHaveProperty(name);
   });

@@ -30,13 +30,17 @@ export function findRoutes(graph: Graph, query: Query, { limit, filters = catalo
   const errors: ProblemError[] = [];
   // Start candidates, pruning and the depth limit read only the Filters directly in the top-level `and`, never `or`/`not` members.
   const topLevelLeaves: PreparedLeaf[] = [];
-  const members = effectiveQuery.and.map((member) => {
-    if (!('filter' in member)) return compile(member, graph, filters, errors);
-    const prepared = prepareLeaf(member, graph, filters, errors);
+  const compileTopLevelMember = (member: Query, path: string): RouteMatcher => {
+    if (!('filter' in member)) return compile(member, graph, filters, errors, path);
+    const prepared = prepareLeaf(member, graph, filters, errors, path);
     if (!prepared) return () => false;
     topLevelLeaves.push(prepared);
     return prepared.matches;
-  });
+  };
+  const members = 'and' in query
+    ? query.and.map((member, index) => compileTopLevelMember(member, `query.and.${index}`))
+    : [compile(query, graph, filters, errors, 'query')];
+  if (effectiveQuery !== query) members.unshift(compileTopLevelMember(DEFAULT_START, 'query'));
   if (errors.length > 0) throw new QueryError(errors);
   const matches: RouteMatcher = (route) => members.every((member) => member(route));
   const checksAt = (position: FilterPosition) => topLevelLeaves.filter((leaf) => leaf.filter.position === position).map((leaf) => leaf.matches);
@@ -66,16 +70,20 @@ function withDefaultStart(query: Query, isStartLeaf: (member: Query) => boolean)
 
 type RouteMatcher = (route: Route) => boolean;
 
-function compile(query: Query, graph: Graph, filters: Filters, errors: ProblemError[]): RouteMatcher {
+function compile(query: Query, graph: Graph, filters: Filters, errors: ProblemError[], path: string): RouteMatcher {
   if ('and' in query) {
-    const members = query.and.map((member) => compile(member, graph, filters, errors));
+    const members = query.and.map((member, index) => compile(member, graph, filters, errors, `${path}.and.${index}`));
     return (route) => members.every((matches) => matches(route));
   }
-  return compileLeaf(query, graph, filters, errors);
-}
-
-function compileLeaf(leaf: FilterLeaf, graph: Graph, filters: Filters, errors: ProblemError[]): RouteMatcher {
-  return prepareLeaf(leaf, graph, filters, errors)?.matches ?? (() => false);
+  if ('or' in query) {
+    const members = query.or.map((member, index) => compile(member, graph, filters, errors, `${path}.or.${index}`));
+    return (route) => members.some((matches) => matches(route));
+  }
+  if ('not' in query) {
+    const matches = compile(query.not, graph, filters, errors, `${path}.not`);
+    return (route) => !matches(route);
+  }
+  return prepareLeaf(query, graph, filters, errors, path)?.matches ?? (() => false);
 }
 
 interface PreparedLeaf {
@@ -85,15 +93,15 @@ interface PreparedLeaf {
 }
 
 /** The leaf's Filter, check and matcher, or undefined after pushing to `errors`. */
-function prepareLeaf(leaf: FilterLeaf, graph: Graph, filters: Filters, errors: ProblemError[]): PreparedLeaf | undefined {
+function prepareLeaf(leaf: FilterLeaf, graph: Graph, filters: Filters, errors: ProblemError[], path: string): PreparedLeaf | undefined {
   const filter = filters.get(leaf.filter);
   if (!filter) {
-    errors.push({ filter: leaf.filter, message: `Unknown Filter "${leaf.filter}".` });
+    errors.push({ filter: leaf.filter, path, message: `Unknown Filter "${leaf.filter}".` });
     return undefined;
   }
   const prepared = filter.prepare(leaf.params, graph);
   if (!prepared.ok) {
-    errors.push(...prepared.errors);
+    errors.push(...prepared.errors.map((error) => ({ ...error, path })));
     return undefined;
   }
   return { filter, check: prepared.check, matches: toRouteMatcher(filter, prepared.check, graph) };

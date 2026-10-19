@@ -4,6 +4,34 @@ A REST API and React UI for querying Routes in a microservice graph.
 
 Use Node.js 22 or newer and pnpm. Run `pnpm install`, then `pnpm dev` to start the API and web app. Run `pnpm verify` for typechecking, linting, tests and builds.
 
+## Querying the API
+
+Open `/docs` on the API server for interactive Swagger documentation. `GET /api/routes` runs a flat AND Query: `?filters=startsAtPublic,endsAtSink&endsAtSink.kinds=rds&limit=50`. Filter params are namespaced by Filter name; lists are comma-separated. Each Filter may appear once in GET. Use `POST /api/routes/query` for repeated Filters or nested `and` / `or` / `not` trees:
+
+```json
+{
+  "query": {
+    "and": [
+      { "filter": "startsAtPublic" },
+      { "filter": "passesThrough", "params": { "node": "frontend" } },
+      {
+        "or": [
+          { "filter": "passesThrough", "params": { "node": "admin-basic-info-service" } },
+          { "not": { "filter": "hasVulnerability", "params": { "minSeverity": "high" } } }
+        ]
+      }
+    ]
+  },
+  "limit": 50
+}
+```
+
+Each tree member has exactly one form: `{ filter, params? }`, `{ and: [...] }`, `{ or: [...] }` or `{ not: ... }`. AND requires every member, OR requires any member, and NOT negates its member. Repeated Filters keep their own params, so two `passesThrough` leaves in an AND require both nodes. An empty AND accepts every Route; an empty OR accepts none.
+
+Both endpoints return `{ nodes, edges, routes, meta }`, with the union subgraph, exact Routes and `meta.effectiveQuery` showing the Query that ran. Unless a start-position Filter is a direct member of the top-level `and`, the engine adds `startsAtEntry`. A bare Filter, an `or` / `not` root, or a start Filter nested deeper still gets this default. Start candidates, end-node pruning and depth bounds use only direct Filter leaves in the top-level `and`; Filters inside `or` / `not` never constrain other branches. Filters select complete Routes of at least one edge ending at a node without outgoing edges. A Sink with outgoing edges cannot end a Route.
+
+`limit` defaults to 100 and cannot exceed 1000. The engine looks for one extra matching Route to determine `meta.truncated`; `meta.routeCount` counts only returned Routes. All tree leaves are validated before searching, including branches that cannot match. Invalid Filter names, params, graph node names or Sink kinds return 400 RFC 7807 problem details. Filter errors name `filter`, `param` when applicable, and a `path` such as `query.and.0.or.1` locating the leaf in the submitted tree, before the Entry default is added. Equivalent flat GET and POST Queries return the same response.
+
 ## Exploring Routes
 
 The default Query runs on first load and lists Routes starting at Entries. Run a Query using the Filter toggles and parameters on the left. The canvas initially shows the full graph, highlighting matched nodes and edges and dimming everything else.
