@@ -3,10 +3,11 @@ import { Button } from '../atoms/Button';
 import { useFilterCatalog } from '../hooks/useFilterCatalog';
 import { useFilterRoutes } from '../hooks/useRoutes';
 import { onlyFilter } from '../lib/queryString';
+import { isTreeQuery, type ExplorerQuery } from '../lib/queryTree';
 import { formatRouteCount } from '../lib/routeCount';
 
 interface EmptyRoutesProps {
-  query: FlatQuery;
+  query: ExplorerQuery;
   onApply: (query: FlatQuery) => void;
 }
 
@@ -15,7 +16,9 @@ export function EmptyRoutes({ query, onApply }: EmptyRoutesProps) {
   return (
     <div className="space-y-3 rounded border border-slate-200 bg-slate-50 p-3">
       <p className="font-medium text-slate-900">No Routes match this Query.</p>
-      {query.filters.length > 1 ? (
+      {isTreeQuery(query) ? (
+        <p className="text-slate-600">Try removing a member of the tree, or changing an AND group to OR. Check the effective Query for a default start Filter.</p>
+      ) : query.filters.length > 1 ? (
         <>
           <p className="text-slate-600">Try removing a Filter. Choose a Filter below to apply just that one with its current parameters.</p>
           <ul className="space-y-2">
@@ -35,8 +38,10 @@ export function EmptyRoutes({ query, onApply }: EmptyRoutesProps) {
   );
 }
 
-interface FilterHintProps extends EmptyRoutesProps {
+interface FilterHintProps {
+  query: FlatQuery;
   filter: string;
+  onApply: (query: FlatQuery) => void;
 }
 
 function FilterHint({ query, filter, onApply }: FilterHintProps) {

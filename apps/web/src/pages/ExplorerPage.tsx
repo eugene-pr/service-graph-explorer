@@ -1,4 +1,4 @@
-import type { FilterName, FlatQuery, ProblemError } from '@sge/domain';
+import type { FilterName, ProblemError } from '@sge/domain';
 import { ApiError } from '../api/client';
 import { Spinner } from '../atoms/Spinner';
 import { Toggle } from '../atoms/Toggle';
@@ -6,7 +6,9 @@ import { useFilterCatalog } from '../hooks/useFilterCatalog';
 import { useGraph } from '../hooks/useGraph';
 import { DEFAULT_QUERY, useQueryState } from '../hooks/useQueryState';
 import { useRoutes } from '../hooks/useRoutes';
-import { toSearchParams, withFilter } from '../lib/queryString';
+import { withFilter } from '../lib/queryString';
+import { isTreeQuery, withTopLevelLeaf, type ExplorerQuery } from '../lib/queryTree';
+import { writeQueryUrl } from '../lib/queryUrl';
 import { WarningsBanner } from '../molecules/WarningsBanner';
 import { EmptyRoutes } from '../organisms/EmptyRoutes';
 import { GraphCanvas } from '../organisms/GraphCanvas';
@@ -34,10 +36,19 @@ export function ExplorerPage() {
 
   // Placeholder data is the previous Query's result: don't present it as this Query's matches.
   const current = routes.isError || routes.isPlaceholderData ? undefined : routes.data;
-  const runQuery = (next: FlatQuery) => {
+  const runQuery = (next: ExplorerQuery) => {
     // Same Query: same cache key, so setting it again wouldn't refetch. Run it again explicitly.
-    if (toSearchParams(next).toString() === toSearchParams(query).toString()) void routes.refetch();
+    if (writeQueryUrl(next).toString() === writeQueryUrl(query).toString()) void routes.refetch();
     else setQuery(next);
+  };
+
+  const showRoutesThrough = (node: string): ExplorerQuery => {
+    if (isTreeQuery(query)) return { ...query, query: withTopLevelLeaf(query.query, { filter: PASSES_THROUGH, params: { node } }) };
+    return {
+      ...query,
+      filters: withFilter(query.filters, PASSES_THROUGH, true, catalog.data?.filters.map((f) => f.name)),
+      params: { ...query.params, [PASSES_THROUGH]: { node } },
+    };
   };
 
   const routesError = routes.error && {
@@ -67,6 +78,7 @@ export function ExplorerPage() {
               query={query}
               defaultQuery={DEFAULT_QUERY}
               nodeKinds={graph.data?.meta.kinds}
+              effectiveQuery={current?.meta.effectiveQuery}
               onRun={runQuery}
               onReset={reset}
             />
@@ -109,13 +121,7 @@ export function ExplorerPage() {
           <NodeDetails
             node={selected}
             onClose={() => selectNode(undefined)}
-            onShowRoutesThrough={() =>
-              runQuery({
-                ...query,
-                filters: withFilter(query.filters, PASSES_THROUGH, true, catalog.data?.filters.map((f) => f.name)),
-                params: { ...query.params, [PASSES_THROUGH]: { node: selected.name } },
-              })
-            }
+            onShowRoutesThrough={() => runQuery(showRoutesThrough(selected.name))}
           />
         )
       }

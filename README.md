@@ -47,17 +47,23 @@ When no Routes match, the Route list explains the empty result and suggests remo
 
 Click a hint to apply just that Filter, keeping its parameters, the limit and view mode. The URL, Query panel and results update together. Hints appear only for the current Query's confirmed empty result. With a single active Filter, the empty state suggests changing its parameters or removing it, with no hint. With no active Filters, it suggests choosing a start-position Filter instead. All empty-state copy applies to any graph file.
 
+### Advanced mode
+
+Turn on **Advanced** in the Query panel to build an `and` / `or` / `not` tree instead of the flat Filter list. Switching on turns the current flat Filters and params into an `and` tree; switching off returns to the flat draft. Switching back on without editing the flat draft keeps the tree's edits. Each group chooses **every member (AND)** or **any member (OR)** and adds Filters or nested groups from its **Add** control. Each member has a **NOT** toggle that negates it, and a **Remove** button. Leaf param inputs are generated from the Filter Catalog, as in the flat panel. **Run** validates every leaf with the shared schemas, naming its tree position (e.g. `query.and.0.or.1`), and sends the tree to `POST /api/routes/query`. The read-only **Effective Query** shows the Query the engine last ran, including an added `startsAtEntry`. Groups, toggles, inputs and buttons are native controls with accessible names that include each member's position (e.g. `passesThrough 1.2`), so repeated Filters and groups stay distinguishable and the builder works by keyboard; removing a member moves focus to its group's Add control. "Show Routes through here" sets the `passesThrough` leaf in the tree's top-level `and`, replacing an existing one as in flat mode; a tree whose root isn't an `and` is wrapped in one first. An empty tree result suggests editing the tree instead of per-Filter hints.
+
 ## State and rendering
 
 TanStack Query owns graph, Filter Catalog and Route data. The single Zustand UI store holds the selected node and the identities of hovered and selected Routes. Components subscribe to the fields they use, so Route hover updates the canvas without rerendering the Query panel or page.
 
-The URL owns the current flat Query and view mode, through a single Query hook. **Run** writes Filters, params and limit to the URL; **Matched only** writes the view mode immediately. Bookmark or share the URL to reopen and run that Query. Browser Back and Forward restore Queries and their view modes. Reset returns to the default Query and full graph.
+The URL owns the current Query (flat or advanced tree) and view mode, through a single Query hook. **Run** writes Filters, params and limit to the URL; **Matched only** writes the view mode immediately. Bookmark or share the URL to reopen and run that Query. Browser Back and Forward restore Queries and their view modes. Reset returns to the default Query and full graph.
 
 The format matches `GET /api/routes`: `filters` is a comma-separated list, params use `<filter>.<param>`, and array params are comma-separated. `limit` defaults to 100 (maximum 1000). `view=matched` shows only matches; omitted or `view=full` shows the full graph. For example:
 
 ```text
 /?filters=endsAtSink,hasVulnerability&endsAtSink.kinds=rds&hasVulnerability.minSeverity=high&limit=50&view=matched
 ```
+
+An advanced tree is kept as its JSON in URL-safe base64 (base64url) in `q`, with `limit` and `view` as above: `/?q=eyJhbmQiOlt7ImZpbHRlciI6InN0YXJ0c0F0UHVibGljIn1dfQ&view=matched` is `{"and":[{"filter":"startsAtPublic"}]}`. A `q` URL opens in advanced mode. A `q` that isn't base64url JSON of a Query, has an unknown Filter or invalid params, or comes with flat `filters` falls back to defaults like any invalid URL.
 
 URL values are validated with the shared domain schemas and Filter Catalog. Unknown Filters or params, invalid values, and duplicate query-string keys fall back to the whole default Query and full graph, with a short non-blocking notice. The original URL remains available for correction; changing the Query, resetting it or changing the view mode writes a fresh URL. Running the unchanged default Query retries it without rewriting the invalid URL. Node names and Sink kinds are checked against the loaded graph by the API, with errors shown in the Route list.
 

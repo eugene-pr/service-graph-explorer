@@ -1,4 +1,4 @@
-import type { ParamJsonSchema } from '@sge/domain';
+import type { FilterInfo, ParamJsonSchema } from '@sge/domain';
 import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { Toggle } from '../atoms/Toggle';
@@ -49,6 +49,41 @@ export function ParamInput({ id, name, schema, required, value, onChange, option
           {hint}
         </p>
       )}
+    </div>
+  );
+}
+
+interface ParamInputsProps {
+  /** Each input's id is `<idPrefix>-<param>`. */
+  idPrefix: string;
+  /** A Filter's params, as the Filter Catalog serves them; one input per param. */
+  params: FilterInfo['params'];
+  /** Values in query-string form; a missing param is empty. */
+  values: Readonly<Record<string, string>>;
+  onChange: (param: string, value: string) => void;
+  /** The node kinds in the graph, for params whose values are node kinds. */
+  nodeKinds: readonly string[] | undefined;
+  className?: string;
+}
+
+/** An input for each of a Filter's params; nothing for a Filter without params. */
+export function ParamInputs({ idPrefix, params, values, onChange, nodeKinds, className = '' }: ParamInputsProps) {
+  const properties = Object.entries(params.properties ?? {});
+  if (properties.length === 0) return null;
+  return (
+    <div className={`space-y-2 ${className}`}>
+      {properties.map(([param, schema]) => (
+        <ParamInput
+          key={param}
+          id={`${idPrefix}-${param}`}
+          name={param}
+          schema={schema}
+          required={params.required?.includes(param) ?? false}
+          value={values[param] ?? ''}
+          onChange={(value) => onChange(param, value)}
+          options={schema['x-options'] === 'nodeKinds' ? nodeKinds : undefined}
+        />
+      ))}
     </div>
   );
 }

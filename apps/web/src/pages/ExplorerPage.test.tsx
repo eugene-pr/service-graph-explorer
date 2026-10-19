@@ -405,6 +405,114 @@ describe('ExplorerPage', () => {
       expect(screen.queryByText(/URL.*default Query/i)).not.toBeInTheDocument();
     });
   });
+
+  describe('advanced Query tree', () => {
+    const toBase64Url = (value: unknown) =>
+      btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(value)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const fromBase64Url = (value: string): unknown =>
+      JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))));
+
+    /** Records POST bodies and answers with the default-wrapped Query as the effective Query. */
+    const recordTreeRequests = () => {
+      const bodies: unknown[] = [];
+      server.use(http.post('*/api/routes/query', async ({ request }) => {
+        const body: unknown = await request.json();
+        bodies.push(body);
+        const query = typeof body === 'object' && body !== null && 'query' in body ? body.query : undefined;
+        const response = routesFixture([entryRoutes[0]!]);
+        return HttpResponse.json({ ...response, meta: { ...response.meta, effectiveQuery: { and: [{ filter: 'startsAtEntry' }, query] } } });
+      }));
+      return bodies;
+    };
+
+    it('opens a shared `q` tree, posts it, shows the effective Query, and writes an edited tree back to the URL', async () => {
+      const user = userEvent.setup();
+      const tree = { or: [{ filter: 'passesThrough', params: { node: 'auth-service' } }, { not: { filter: 'hasVulnerability' } }] };
+      window.history.replaceState(null, '', `/?q=${toBase64Url(tree)}&limit=5&view=matched`);
+      const bodies = recordTreeRequests();
+      renderWithQueryClient(<ExplorerPage />);
+
+      await screen.findByText('1 Route');
+      expect(bodies).toEqual([{ query: tree, limit: 5 }]);
+      expect(screen.getByRole('checkbox', { name: 'Advanced' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'Matched only' })).toBeChecked();
+      expect(within(screen.getByRole('group', { name: 'passesThrough 1' })).getByRole('textbox', { name: 'node' })).toHaveValue('auth-service');
+      expect(screen.getByRole('region', { name: 'Effective Query' })).toHaveTextContent('startsAtEntry');
+
+      const node = within(screen.getByRole('group', { name: 'passesThrough 1' })).getByRole('textbox', { name: 'node' });
+      await user.clear(node);
+      await user.type(node, 'frontend');
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+
+      const edited = { or: [{ filter: 'passesThrough', params: { node: 'frontend' } }, { not: { filter: 'hasVulnerability' } }] };
+      await vi.waitFor(() => expect(bodies.at(-1)).toEqual({ query: edited, limit: 5 }));
+      const search = new URLSearchParams(window.location.search);
+      expect(fromBase64Url(search.get('q') ?? '')).toEqual(edited);
+      expect(search.get('limit')).toBe('5');
+      expect(search.get('view')).toBe('matched');
+      expect(search.has('filters')).toBe(false);
+    });
+
+    it('"Show Routes through here" replaces the top-level passesThrough of a tree, keeping the rest', async () => {
+      const user = userEvent.setup();
+      const tree = { and: [{ filter: 'passesThrough', params: { node: 'frontend' } }, { not: { filter: 'hasVulnerability' } }] };
+      window.history.replaceState(null, '', `/?q=${toBase64Url(tree)}`);
+      const bodies = recordTreeRequests();
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('1 Route');
+
+      await clickNode('auth-service');
+      await user.click(within(nodeDetails()).getByRole('button', { name: /show routes through here/i }));
+
+      const expected = { and: [{ filter: 'passesThrough', params: { node: 'auth-service' } }, { not: { filter: 'hasVulnerability' } }] };
+      await vi.waitFor(() => expect(bodies.at(-1)).toEqual({ query: expected, limit: 100 }));
+      expect(fromBase64Url(new URLSearchParams(window.location.search).get('q') ?? '')).toEqual(expected);
+    });
+
+    it('runs the flat Query as an AND tree after switching to advanced, and Reset returns to the flat default', async () => {
+      const user = userEvent.setup();
+      window.history.replaceState(null, '', '/?filters=startsAtPublic');
+      const bodies = recordTreeRequests();
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('2 Routes');
+
+      await user.click(screen.getByRole('checkbox', { name: 'Advanced' }));
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+
+      await screen.findByText('1 Route');
+      expect(bodies).toEqual([{ query: { and: [{ filter: 'startsAtPublic' }] }, limit: 100 }]);
+      expect(fromBase64Url(new URLSearchParams(window.location.search).get('q') ?? '')).toEqual({ and: [{ filter: 'startsAtPublic' }] });
+
+      await user.click(screen.getByRole('button', { name: 'Reset' }));
+      expect(window.location.search).toBe('');
+      expect(screen.getByRole('checkbox', { name: 'Advanced' })).not.toBeChecked();
+    });
+
+    it.each([
+      ['not base64url', 'q=%%%'],
+      ['not JSON', `q=${btoa('{').replace(/=+$/, '')}`],
+      ['not a Query', `q=${toBase64Url({ xor: [] })}`],
+      ['an unknown Filter', `q=${toBase64Url({ and: [{ filter: 'retiredFilter' }] })}`],
+      ['invalid params', `q=${toBase64Url({ and: [{ filter: 'maxLength', params: { hops: 0 } }] })}`],
+      ['flat Filters as well', `q=${toBase64Url({ and: [] })}&filters=startsAtPublic`],
+    ])('falls back to defaults for a `q` with %s', async (_, search) => {
+      window.history.replaceState(null, '', `/?${search}`);
+      const bodies = recordTreeRequests();
+      const requests: string[] = [];
+      server.use(http.get('*/api/routes', ({ request }) => {
+        requests.push(new URL(request.url).search);
+        return HttpResponse.json(routesFixture(entryRoutes));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+
+      await screen.findByText('2 Routes');
+      expect(requests).toEqual(['']);
+      expect(bodies).toEqual([]);
+      expect(screen.getByRole('status')).toHaveTextContent(/URL.*default Query/i);
+      expect(screen.getByRole('checkbox', { name: 'Advanced' })).not.toBeChecked();
+    });
+  });
+
   describe('Route highlights', () => {
     it('preserves selection after an error removes the hovered row and a retry restores it', async () => {
       const user = userEvent.setup();

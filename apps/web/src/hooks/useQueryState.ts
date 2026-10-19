@@ -1,7 +1,6 @@
-import type { FlatQuery } from '@sge/domain';
 import { useMemo, useSyncExternalStore, type SetStateAction } from 'react';
-import { DEFAULT_QUERY, readQueryUrl } from '../lib/queryUrl';
-import { toSearchParams } from '../lib/queryString';
+import { DEFAULT_QUERY, readQueryUrl, writeQueryUrl } from '../lib/queryUrl';
+import type { ExplorerQuery } from '../lib/queryTree';
 
 export { DEFAULT_QUERY } from '../lib/queryUrl';
 
@@ -16,9 +15,9 @@ const subscribe = (onChange: () => void) => {
   };
 };
 
-function updateUrl(update: (current: ReturnType<typeof readQueryUrl>) => { query: FlatQuery; matchedOnly: boolean }) {
+function updateUrl(update: (current: ReturnType<typeof readQueryUrl>) => { query: ExplorerQuery; matchedOnly: boolean }) {
   const next = update(readQueryUrl(getSearch()));
-  const search = toSearchParams(next.query);
+  const search = writeQueryUrl(next.query);
   if (next.matchedOnly) search.set('view', 'matched');
   // Invalid incoming URLs recover to defaults; invalid edits must leave the current Query intact.
   if (readQueryUrl(search.toString()).invalid) return;
@@ -34,14 +33,14 @@ export function useQueryState() {
   const search = useSyncExternalStore(subscribe, getSearch);
   const state = useMemo(() => readQueryUrl(search), [search]);
   // Keep the Query identity stable during view changes so the panel keeps its unsubmitted edits.
-  const querySearch = toSearchParams(state.query).toString();
+  const querySearch = writeQueryUrl(state.query).toString();
   const query = useMemo(() => readQueryUrl(querySearch).query, [querySearch]);
   const { matchedOnly } = state;
   return useMemo(() => {
     return {
       query,
       matchedOnly,
-      setQuery: (next: SetStateAction<FlatQuery>) => updateUrl((current) => ({
+      setQuery: (next: SetStateAction<ExplorerQuery>) => updateUrl((current) => ({
         ...current,
         query: typeof next === 'function' ? next(current.query) : next,
       })),
