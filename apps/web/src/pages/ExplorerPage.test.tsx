@@ -863,6 +863,57 @@ describe('ExplorerPage', () => {
     });
   });
 
+  describe('dragging nodes', () => {
+    const nodeGroup = async (name: string) =>
+      within(await screen.findByRole('region', { name: /service graph/i })).findByRole('group', { name });
+
+    /** jsdom rejects `view` in a MouseEvent init, but the canvas's drag handler (d3-drag) reads it. */
+    const mouse = (target: Element | Window, type: string, clientX: number, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY });
+      Object.defineProperty(event, 'view', { value: window });
+      fireEvent(target, event);
+    };
+
+    const dragNode = async (name: string, by: { x: number; y: number }) => {
+      const group = await nodeGroup(name);
+      mouse(group, 'mousedown', 0, 0);
+      mouse(window, 'mousemove', by.x / 2, by.y / 2);
+      mouse(window, 'mousemove', by.x, by.y);
+      // A user releases in a later task. Releasing in this one races React Flow's auto-pan, which then never stops.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      mouse(window, 'mouseup', by.x, by.y);
+    };
+
+    it('keeps a dragged node where it was dropped after a Query change, without selecting it', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<ExplorerPage />);
+      const group = await nodeGroup('auth-service');
+      await vi.waitFor(() => expect(group.style.transform).toMatch(/translate/));
+      const before = group.style.transform;
+
+      await dragNode('auth-service', { x: 300, y: 200 });
+
+      await vi.waitFor(() => expect(group.style.transform).not.toBe(before));
+      const dropped = group.style.transform;
+      expect(screen.queryByRole('region', { name: /node details/i })).not.toBeInTheDocument();
+
+      await user.click(await screen.findByRole('checkbox', { name: 'startsAtPublic' }));
+      await user.click(screen.getByRole('button', { name: /run/i }));
+      await vi.waitFor(() => expect(window.location.search).toContain('startsAtPublic'));
+
+      expect((await nodeGroup('auth-service')).style.transform).toBe(dropped);
+    });
+
+    it('shows a MiniMap of the graph and the current viewport', async () => {
+      renderWithQueryClient(<ExplorerPage />);
+      await nodeGroup('auth-service');
+
+      const minimap = await screen.findByRole('img', { name: /service graph overview/i });
+      expect(minimap.querySelectorAll('.react-flow__minimap-node')).toHaveLength(4);
+      expect(minimap.querySelector('.react-flow__minimap-mask')).toBeInTheDocument();
+    });
+  });
+
   describe('Query', () => {
     /** Answers `/api/routes` with `respond(searchParams)` and records each request's search params. */
     const recordRoutesRequests = (respond: (params: URLSearchParams) => string[][] = () => entryRoutes) => {

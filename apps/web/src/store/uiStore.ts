@@ -10,6 +10,9 @@ interface UiState {
   selectedRoute: string | undefined;
   selectRoute: (key: string) => void;
   clearRouteHighlight: () => void;
+  /** Positions of nodes the user dragged, by node name; they outlive Query changes. */
+  nodePositions: Record<string, { x: number; y: number }>;
+  moveNode: (name: string, position: { x: number; y: number }) => void;
 }
 
 export const useUiStore = create<UiState>()((set) => ({
@@ -20,4 +23,6 @@ export const useUiStore = create<UiState>()((set) => ({
   selectedRoute: undefined,
   selectRoute: (selectedRoute) => set({ selectedRoute, hoveredRoute: undefined }),
   clearRouteHighlight: () => set({ selectedRoute: undefined, hoveredRoute: undefined }),
+  nodePositions: {},
+  moveNode: (name, position) => set((s) => ({ nodePositions: { ...s.nodePositions, [name]: position } })),
 }));

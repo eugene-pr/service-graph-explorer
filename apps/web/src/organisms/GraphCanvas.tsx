@@ -1,5 +1,5 @@
 import type { GraphResponse, RoutesResponse } from '@sge/domain';
-import { Background, Controls, ReactFlow, type ReactFlowInstance } from '@xyflow/react';
+import { Background, Controls, MiniMap, ReactFlow, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { layoutGraph } from '../lib/layout';
@@ -46,10 +46,12 @@ function useLayoutAspect(graph: GraphResponse) {
 export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelectNode }: GraphCanvasProps) {
   const hoveredRoute = useUiStore((s) => s.hoveredRoute);
   const selectedRoute = useUiStore((s) => s.selectedRoute);
+  const positions = useUiStore((s) => s.nodePositions);
+  const moveNode = useUiStore((s) => s.moveNode);
   const { ref, aspect } = useLayoutAspect(graph);
   const { nodes, edges } = useMemo(
-    () => toFlowGraph(graph, result, { hoveredRoute, selectedRoute, selectedNode, matchedOnly, aspect }),
-    [graph, result, hoveredRoute, selectedRoute, selectedNode, matchedOnly, aspect],
+    () => toFlowGraph(graph, result, { hoveredRoute, selectedRoute, selectedNode, matchedOnly, aspect, positions }),
+    [graph, result, hoveredRoute, selectedRoute, selectedNode, matchedOnly, aspect, positions],
   );
   // The `fitView` prop fits only the first layout; refit each new one.
   const flow = useRef<ReactFlowInstance<ServiceFlowNode>>(null);
@@ -65,10 +67,13 @@ export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelect
         nodeTypes={nodeTypes}
         onInit={(instance) => { flow.current = instance; }}
         onNodesChange={(changes) => {
+          for (const change of changes) {
+            if (change.type === 'position' && change.position) moveNode(change.id, change.position);
+          }
           const next = selectionAfter(changes, selectedNode);
           if (next !== selectedNode) onSelectNode(next);
         }}
-        nodesDraggable={false}
+        selectNodesOnDrag={false}
         nodesConnectable={false}
         minZoom={0.1}
         fitView
@@ -76,6 +81,7 @@ export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelect
       >
         <Background />
         <Controls showInteractive={false} />
+        <MiniMap pannable zoomable ariaLabel="Service graph overview" />
       </ReactFlow>
     </section>
   );

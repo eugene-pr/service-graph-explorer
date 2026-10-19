@@ -41,13 +41,15 @@ const edgeStyles = {
 export function toFlowGraph(
   graph: GraphResponse,
   result?: RoutesResponse,
-  { hoveredRoute, selectedRoute, selectedNode, matchedOnly = false, aspect = 16 / 10 }: {
+  { hoveredRoute, selectedRoute, selectedNode, matchedOnly = false, aspect = 16 / 10, positions }: {
     hoveredRoute?: string | undefined;
     selectedRoute?: string | undefined;
     selectedNode?: string | undefined;
     matchedOnly?: boolean;
     /** Canvas width / height; a 16:10 canvas until measured. */
     aspect?: number | undefined;
+    /** Positions overriding the layout, by node id. */
+    positions?: Readonly<Record<string, { x: number; y: number }>> | undefined;
   } = {},
 ): { nodes: ServiceFlowNode[]; edges: Edge[] } {
   // A removed hover preview must not mask a selection that still belongs to the current result.
@@ -64,6 +66,7 @@ export function toFlowGraph(
 
   const nodes = layoutNodes(graph, aspect).map((node) => ({
     ...node,
+    position: positions?.[node.id] ?? node.position,
     selected: node.id === selectedNode,
     hidden: matchedOnly && !!matchedNodes && !matchedNodes.has(node.id),
     data: { ...node.data, highlighted: highlightedNodes?.has(node.id) },
