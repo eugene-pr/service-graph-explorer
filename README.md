@@ -27,7 +27,7 @@ The format matches `GET /api/routes`: `filters` is a comma-separated list, param
 /?filters=endsAtSink,hasVulnerability&endsAtSink.kinds=rds&hasVulnerability.minSeverity=high&limit=50&view=matched
 ```
 
-URL values are validated with the shared domain schemas and Filter Catalog. Unknown Filters or params, invalid values, and duplicate query-string keys fall back to the whole default Query and full graph, with a short non-blocking notice. The original URL remains available for correction; Run, Reset or a view change writes a fresh URL. Node names and Sink kinds are checked against the loaded graph by the API, with errors shown in the Route list.
+URL values are validated with the shared domain schemas and Filter Catalog. Unknown Filters or params, invalid values, and duplicate query-string keys fall back to the whole default Query and full graph, with a short non-blocking notice. The original URL remains available for correction; changing the Query, resetting it or changing the view mode writes a fresh URL. Running the unchanged default Query retries it without rewriting the invalid URL. Node names and Sink kinds are checked against the loaded graph by the API, with errors shown in the Route list.
 
 The current Query has no component or Zustand copy. The Query panel keeps only unsubmitted form edits locally; they become the current Query on Run, and browser navigation to another Query replaces them.
 
