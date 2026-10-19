@@ -1,3 +1,4 @@
+import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { FiltersResponse, GraphResponse, HealthResponse, Limit, Problem, RoutesQueryRequest, RoutesResponse } from '@sge/domain';
@@ -15,11 +16,13 @@ import type { Filters } from './filters/filter.js';
 import { filters as catalogFilters } from './filters/index.js';
 import type { Graph } from './graph/graph.js';
 import { parseFlatQuery } from './http/flatQuery.js';
-import { useProblemDetails } from './http/problem.js';
+import { useProblemDetails, type NotFoundFallback } from './http/problem.js';
 
 export interface AppOptions extends FastifyServerOptions {
   /** The Filters Queries may use; defaults to the Filter Catalog's. */
   filters?: Filters;
+  /** Absolute path to the built web app; when set, it is served at `/` with a fallback to the SPA. */
+  webDist?: string;
 }
 
 const RoutesQueryString = z.looseObject({
@@ -27,11 +30,19 @@ const RoutesQueryString = z.looseObject({
   limit: Limit.describe('Most Routes to return.'),
 });
 
-export function buildApp(graph: Graph, { filters = catalogFilters, ...options }: AppOptions = {}) {
+/** A GET for an app page, not for the API, the docs or an asset file: answered with the SPA's `index.html`. */
+const spaFallback: NotFoundFallback = (request, reply) => {
+  const path = request.url.split('?')[0] ?? '';
+  const isPage = request.method === 'GET' && !/^\/(api|docs|health)(\/|$)/.test(path) && !/\.[^/]*$/.test(path);
+  return isPage ? reply.sendFile('index.html') : undefined;
+};
+
+export function buildApp(graph: Graph, { filters = catalogFilters, webDist, ...options }: AppOptions = {}) {
   const app = Fastify(options);
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
-  useProblemDetails(app);
+  useProblemDetails(app, webDist ? spaFallback : undefined);
+  if (webDist) void app.register(fastifyStatic, { root: webDist });
 
   void app.register(swagger, {
     openapi: { info: { title: 'Service Graph Explorer API', version: '1.0.0' } },

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_GRAPH_FILE, loadGraph, loadGraphFile } from './loadGraph.js';
+import { fileURLToPath } from 'node:url';
+import { DEFAULT_GRAPH_FILE, loadGraph, loadGraphFile, loadGraphFromEnv } from './loadGraph.js';
 
 const service = (name: string) => ({ name, kind: 'service' });
 
@@ -143,5 +144,20 @@ describe('loadGraphFile', () => {
 
   it('fails with a readable error when the file is not JSON', async () => {
     await expect(loadGraphFile(new URL(import.meta.url))).rejects.toThrow(/not valid JSON/i);
+  });
+});
+
+describe('loadGraphFromEnv', () => {
+  it('loads the bundled data when `GRAPH_FILE` is not set', async () => {
+    const graph = await loadGraphFromEnv({});
+
+    expect(graph.nodes.filter((n) => n.inferred).map((n) => n.name)).toEqual(['assurance-service']);
+  });
+
+  it('loads the file `GRAPH_FILE` names', async () => {
+    const file = fileURLToPath(new URL('../test/graph.fixture.json', import.meta.url));
+    const graph = await loadGraphFromEnv({ GRAPH_FILE: file });
+
+    expect(graph.nodes.map((n) => n.name)).toEqual(['only']);
   });
 });

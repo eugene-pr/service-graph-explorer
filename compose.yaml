@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # Optional. Unset: the bundled graph. Set to a file under /graphs (./data on the host),
+      # e.g. GRAPH_FILE=/graphs/train-ticket-be.json docker compose up
+      - GRAPH_FILE
+    volumes:
+      - ./data:/graphs:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s

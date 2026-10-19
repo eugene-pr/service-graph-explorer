@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { FiltersResponse, Problem, RoutesResponse } from '@sge/domain';
 import { z } from 'zod';
@@ -220,6 +221,47 @@ describe('errors', () => {
     expect(res.statusCode).toBe(404);
     expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
     expect(res.json()).toMatchObject({ type: 'about:blank', title: 'Not Found', status: 404 });
+  });
+});
+
+describe('the built web app', () => {
+  const webDist = fileURLToPath(new URL('./test/web-dist', import.meta.url));
+  const app = buildApp(graph, { webDist });
+
+  it('is served at /', async () => {
+    const res = await app.inject({ method: 'GET', url: '/' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.body).toContain('<div id="root">');
+  });
+
+  it('serves its assets', async () => {
+    const res = await app.inject({ method: 'GET', url: '/assets/app.css' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/css/);
+  });
+
+  it('falls back to the SPA for a deep link', async () => {
+    const res = await app.inject({ method: 'GET', url: '/routes?filters=startsAtPublic', headers: { accept: 'text/html' } });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('<div id="root">');
+  });
+
+  it('leaves the API, health and docs in place', async () => {
+    expect((await app.inject({ method: 'GET', url: '/health' })).json()).toEqual({ status: 'ok' });
+    expect((await app.inject({ method: 'GET', url: '/api/graph' })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/docs/' })).statusCode).toBe(200);
+  });
+
+  it('still returns 404 problem details for an unknown API path or missing asset', async () => {
+    for (const url of ['/api/nope', '/assets/missing.js']) {
+      const res = await app.inject({ method: 'GET', url, headers: { accept: 'text/html' } });
+      expect(res.statusCode).toBe(404);
+      expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+    }
   });
 });
 

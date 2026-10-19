@@ -1,9 +1,12 @@
 import type { Problem, ProblemError } from '@sge/domain';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 import { STATUS_CODES } from 'node:http';
 import { z } from 'zod';
 import { QueryError } from '../engine/findRoutes.js';
+
+/** Answers an unmatched request instead of a 404 problem, or returns undefined to decline. */
+export type NotFoundFallback = (request: FastifyRequest, reply: FastifyReply) => FastifyReply | undefined;
 
 export function sendProblem(reply: FastifyReply, status: number, detail: string, errors?: ProblemError[]) {
   const problem: Problem = {
@@ -17,8 +20,10 @@ export function sendProblem(reply: FastifyReply, status: number, detail: string,
 }
 
 /** Every error leaves as RFC 7807 problem details; stack traces stay in the server log. */
-export function useProblemDetails(app: FastifyInstance) {
-  app.setNotFoundHandler((request, reply) => sendProblem(reply, 404, `No route for ${request.method} ${request.url}.`));
+export function useProblemDetails(app: FastifyInstance, notFoundFallback?: NotFoundFallback) {
+  app.setNotFoundHandler(
+    (request, reply) => notFoundFallback?.(request, reply) ?? sendProblem(reply, 404, `No route for ${request.method} ${request.url}.`),
+  );
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof QueryError) {

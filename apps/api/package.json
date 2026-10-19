@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fastify/static": "10.1.6",
     "@fastify/swagger": "9.9.2",
     "@fastify/swagger-ui": "6.1.2",
     "@sge/domain": "workspace:*",

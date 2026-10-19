@@ -11,6 +11,14 @@ export class GraphLoadError extends Error {
 /** The bundled data file, used when `GRAPH_FILE` is not set. Same depth from `src/` and `dist/`. */
 export const DEFAULT_GRAPH_FILE = new URL('../../../../data/train-ticket-be.json', import.meta.url);
 
+const GraphEnv = z.object({ GRAPH_FILE: z.string().min(1).optional() });
+
+/** Loads the graph file `GRAPH_FILE` names, or the bundled data when it is not set. */
+export function loadGraphFromEnv(env: Readonly<Record<string, string | undefined>>): Promise<Graph> {
+  const { GRAPH_FILE } = GraphEnv.parse(env);
+  return loadGraphFile(GRAPH_FILE ?? DEFAULT_GRAPH_FILE);
+}
+
 export async function loadGraphFile(file: string | URL): Promise<Graph> {
   let text: string;
   try {
