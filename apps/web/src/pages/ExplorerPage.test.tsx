@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { entryRoutes, graphFixture, routesFixture } from '../test/fixtures';
 import { server } from '../test/server';
 import { renderWithQueryClient } from '../test/render';
+import { resizeElement } from '../test/reactFlowStubs';
 import { ExplorerPage } from './ExplorerPage';
 
 const findNode = async (name: string) => {
@@ -979,6 +980,100 @@ describe('ExplorerPage', () => {
       await drag();
       await toggle();
       await vi.waitFor(async () => expect(await transform()).toBe(full));
+    });
+  });
+
+  describe('canvas resize', () => {
+    const resize = (aspect: number) => act(() => {
+      resizeElement(screen.getByRole('region', { name: 'Service graph' }), aspect * 500, 500);
+    });
+    const renderCanvas = async (matchedOnly = false) => {
+      if (matchedOnly) {
+        window.history.replaceState(null, '', '/?view=matched');
+        const extraNodes = Array.from({ length: 8 }, (_, i) => ({
+          id: `extra-${i}`, data: { ...graphFixture.nodes[3]!.data, name: `extra-${i}` },
+        }));
+        server.use(http.get('*/api/graph', () => HttpResponse.json({
+          ...graphFixture,
+          nodes: [...graphFixture.nodes, ...extraNodes],
+          edges: [...graphFixture.edges, ...extraNodes.map(({ id }) => ({ id: `frontend->${id}`, source: 'frontend', target: id }))],
+        })));
+      }
+      server.use(http.get('*/api/routes', () => HttpResponse.json(routesFixture([entryRoutes[1]!]))));
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('1 Route');
+      const group = await nodeGroup('assurance-service');
+      await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+      resize(1);
+      return group;
+    };
+
+    it('moves handles with the layout direction in both directions', async () => {
+      const group = await renderCanvas();
+      expect(group.querySelector('.target')).toHaveAttribute('data-handlepos', 'top');
+      expect(group.querySelector('.source')).toHaveAttribute('data-handlepos', 'bottom');
+
+      resize(5);
+      await vi.waitFor(() => expect(group.querySelector('.target')).toHaveAttribute('data-handlepos', 'left'));
+      expect(group.querySelector('.source')).toHaveAttribute('data-handlepos', 'right');
+
+      resize(1);
+      await vi.waitFor(() => expect(group.querySelector('.target')).toHaveAttribute('data-handlepos', 'top'));
+      expect(group.querySelector('.source')).toHaveAttribute('data-handlepos', 'bottom');
+    });
+
+    it('relayouts and refits when only the matched subgraph crosses its direction threshold', async () => {
+      const group = await renderCanvas(true);
+      const before = group.style.transform;
+      const viewport = screen.getByRole('region', { name: 'Service graph' }).querySelector<HTMLElement>('.react-flow__viewport');
+      await vi.waitFor(() => expect(viewport?.style.transform).toMatch(/translate/));
+      const beforeView = viewport?.style.transform;
+
+      resize(2.5);
+
+      await vi.waitFor(() => expect(group.style.transform).not.toBe(before));
+      await vi.waitFor(() => expect(viewport?.style.transform).not.toBe(beforeView));
+      expect(group.querySelector('.target')).toHaveAttribute('data-handlepos', 'left');
+    });
+
+    it('keeps dragged positions for ordinary resizes and clears them when the layout flips', async () => {
+      const group = await renderCanvas();
+      const vertical = group.style.transform;
+      resize(5);
+      await vi.waitFor(() => expect(group.style.transform).not.toBe(vertical));
+      const horizontal = group.style.transform;
+      resize(1);
+      await vi.waitFor(() => expect(group.style.transform).toBe(vertical));
+
+      for (const [aspect, expected] of [[5, horizontal], [1, vertical]] as const) {
+        const before = group.style.transform;
+        mouse(group, 'mousedown', 0, 0);
+        mouse(window, 'mousemove', 150, 100);
+        mouse(window, 'mousemove', 300, 200);
+        await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+        mouse(window, 'mouseup', 300, 200);
+        await vi.waitFor(() => expect(group.style.transform).not.toBe(before));
+        const dropped = group.style.transform;
+        resize(aspect === 5 ? 1.1 : 5.1);
+        expect(group.style.transform).toBe(dropped);
+
+        resize(aspect);
+        await vi.waitFor(() => expect(group.style.transform).toBe(expected));
+      }
+    });
+
+    it('renders a node named __proto__ with finite coordinates before it is dragged', async () => {
+      const graph = {
+        ...graphFixture,
+        nodes: graphFixture.nodes.map((node) => node.id === 'frontend'
+          ? { ...node, id: '__proto__', data: { ...node.data, name: '__proto__' } } : node),
+        edges: graphFixture.edges.map((edge) => edge.source === 'frontend' ? { ...edge, source: '__proto__' } : edge),
+      };
+      server.use(http.get('*/api/graph', () => HttpResponse.json(graph)));
+      renderWithQueryClient(<ExplorerPage />);
+
+      const group = await nodeGroup('__proto__');
+      await vi.waitFor(() => expect(group.style.transform).toMatch(/^translate\(\d+(\.\d+)?px,\s*\d+(\.\d+)?px\)$/));
     });
   });
 

@@ -24,7 +24,7 @@ interface GraphCanvasProps {
  * Canvas aspect ratio the layout is fitted to. It follows the first measurement, then changes only when a
  * resize flips the layout direction, so ordinary resizes keep the nodes where they are.
  */
-function useLayoutAspect(graph: GraphResponse) {
+function useLayoutAspect(source: ReturnType<typeof layoutSource>) {
   const ref = useRef<HTMLElement>(null);
   const [aspect, setAspect] = useState<number>();
   useEffect(() => {
@@ -35,11 +35,11 @@ function useLayoutAspect(graph: GraphResponse) {
       if (!width || !height) return;
       const next = width / height;
       setAspect((current) =>
-        current !== undefined && layoutGraph(graph, current).direction === layoutGraph(graph, next).direction ? current : next);
+        current !== undefined && layoutGraph(source, current).direction === layoutGraph(source, next).direction ? current : next);
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [graph]);
+  }, [source]);
   return { ref, aspect };
 }
 
@@ -49,23 +49,25 @@ export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelect
   const positions = useUiStore((s) => s.nodePositions);
   const moveNode = useUiStore((s) => s.moveNode);
   const clearNodePositions = useUiStore((s) => s.clearNodePositions);
-  const { ref, aspect } = useLayoutAspect(graph);
+  const source = layoutSource(graph, result, matchedOnly);
+  const { ref, aspect } = useLayoutAspect(source);
   const { nodes, edges } = useMemo(
     () => toFlowGraph(graph, result, { hoveredRoute, selectedRoute, selectedNode, matchedOnly, aspect, positions }),
     [graph, result, hoveredRoute, selectedRoute, selectedNode, matchedOnly, aspect, positions],
   );
-  // Matched only lays out just the matched nodes; switching what the layout covers drops dragged positions.
-  const source = layoutSource(graph, result, matchedOnly);
-  const laidOut = useRef(source);
+  // Changing the layout source or its measured aspect replaces dragged positions.
+  const laidOut = useRef({ source, aspect });
   useEffect(() => {
-    if (laidOut.current === source) return;
-    laidOut.current = source;
+    if (laidOut.current.source === source && laidOut.current.aspect === aspect) return;
+    laidOut.current = { source, aspect };
     clearNodePositions();
-  }, [source, clearNodePositions]);
+  }, [source, aspect, clearNodePositions]);
   // The `fitView` prop fits only the first layout; refit each new one.
   const flow = useRef<ReactFlowInstance<ServiceFlowNode>>(null);
   useEffect(() => {
-    void flow.current?.fitView(fitViewOptions);
+    // Let React Flow apply the new positions and handle bounds before measuring the view.
+    const frame = requestAnimationFrame(() => { void flow.current?.fitView(fitViewOptions); });
+    return () => cancelAnimationFrame(frame);
   }, [aspect, source]);
 
   return (

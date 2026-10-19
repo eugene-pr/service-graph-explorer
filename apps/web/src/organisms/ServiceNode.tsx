@@ -6,7 +6,7 @@ import { SeverityBadge } from '../molecules/SeverityBadge';
 import { highestSeverity } from '../lib/graph';
 import type { ServiceFlowNode } from '../lib/toFlowGraph';
 
-export function ServiceNode({ data: { node, sink, entry, highlighted }, selected }: NodeProps<ServiceFlowNode>) {
+export function ServiceNode({ data: { node, sink, entry, highlighted }, selected, targetPosition = Position.Top, sourcePosition = Position.Bottom }: NodeProps<ServiceFlowNode>) {
   const severity = highestSeverity(node);
   const vulnCount = node.vulnerabilities.length;
 
@@ -20,7 +20,7 @@ export function ServiceNode({ data: { node, sink, entry, highlighted }, selected
       data-selected={selected}
       className={`size-full transition-opacity ${highlighted === false ? 'opacity-25' : ''}`}
     >
-      <Handle type="target" position={Position.Top} className="opacity-0" />
+      <Handle type="target" position={targetPosition} className="opacity-0" />
       <NodeShape
         sink={sink}
         inferred={node.inferred}
@@ -42,7 +42,7 @@ export function ServiceNode({ data: { node, sink, entry, highlighted }, selected
           {node.inferred && <Badge title="Referenced by an edge but missing from the source data">inferred</Badge>}
         </span>
       </NodeShape>
-      <Handle type="source" position={Position.Bottom} className="opacity-0" />
+      <Handle type="source" position={sourcePosition} className="opacity-0" />
     </div>
   );
 }

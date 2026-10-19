@@ -29,12 +29,14 @@ function layerGraph(graph: LayoutInput, direction: LayoutDirection): Layout {
   const g = new Graph<GraphLabel, NodeLabel, EdgeLabel>();
   g.setGraph({ rankdir: direction, nodesep: 16, ranksep: 80 });
   g.setDefaultEdgeLabel(() => ({}));
-  for (const { id } of graph.nodes) g.setNode(id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-  for (const { source, target } of graph.edges) g.setEdge(source, target);
+  // Dagre uses object dictionaries internally; keep custom names such as __proto__ outside them.
+  const internalIds = new Map(graph.nodes.map(({ id }, index) => [id, `node-${index}`]));
+  for (const id of internalIds.values()) g.setNode(id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  for (const { source, target } of graph.edges) g.setEdge(internalIds.get(source)!, internalIds.get(target)!);
   layout(g);
 
   const corners = graph.nodes.map(({ id }) => {
-    const { x = 0, y = 0 } = g.node(id);
+    const { x = 0, y = 0 } = g.node(internalIds.get(id)!);
     return [id, { x: x - NODE_WIDTH / 2, y: y - NODE_HEIGHT / 2 }] as const;
   });
   const left = Math.min(...corners.map(([, { x }]) => x));

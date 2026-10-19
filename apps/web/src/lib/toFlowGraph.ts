@@ -1,5 +1,5 @@
 import type { GraphNode, GraphResponse, RoutesResponse } from '@sge/domain';
-import { MarkerType, type Edge, type Node, type NodeChange } from '@xyflow/react';
+import { MarkerType, Position, type Edge, type Node, type NodeChange } from '@xyflow/react';
 import { layoutGraph, NODE_HEIGHT, NODE_WIDTH, type Layout } from './layout';
 
 export type ServiceFlowNode = Node<
@@ -31,6 +31,8 @@ function layoutNodes(graph: GraphResponse, source: ReturnType<typeof layoutSourc
     position: layout.positions.get(id) ?? { x: 0, y: 0 },
     width: NODE_WIDTH,
     height: NODE_HEIGHT,
+    targetPosition: layout.direction === 'LR' ? Position.Left : Position.Top,
+    sourcePosition: layout.direction === 'LR' ? Position.Right : Position.Bottom,
     data: { node: data, sink: sinkKinds.has(data.kind), entry: !targets.has(id) },
   }));
   flowNodes.set(layout, nodes);
@@ -72,7 +74,7 @@ export function toFlowGraph(
 
   const nodes = layoutNodes(graph, layoutSource(graph, result, matchedOnly), aspect).map((node) => ({
     ...node,
-    position: positions?.[node.id] ?? node.position,
+    position: positions && Object.hasOwn(positions, node.id) ? positions[node.id]! : node.position,
     selected: node.id === selectedNode,
     hidden: matchedOnly && !!matchedNodes && !matchedNodes.has(node.id),
     data: { ...node.data, highlighted: highlightedNodes?.has(node.id) },
