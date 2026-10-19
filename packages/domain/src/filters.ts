@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity } from './graph.js';
 
 /**
  * Where on a Route a Filter looks:
@@ -40,6 +41,15 @@ export const filterCatalog = {
         .min(1)
         .optional()
         .meta({ description: 'Node kinds that count as Sinks. Default: every kind except service.', 'x-options': 'nodeKinds' }),
+    }),
+  },
+  hasVulnerability: {
+    description: 'Passes through a node with a vulnerability.',
+    position: 'any',
+    params: z.strictObject({
+      minSeverity: Severity.exclude(['unknown'])
+        .optional()
+        .meta({ description: 'Lowest severity that counts; unknown never does. Default: any vulnerability, including unknown.' }),
     }),
   },
 } satisfies FilterCatalog;

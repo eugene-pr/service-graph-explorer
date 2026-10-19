@@ -1,4 +1,4 @@
-import { filterCatalog } from '@sge/domain';
+import { filterCatalog, SEVERITIES } from '@sge/domain';
 import { createFilters, type FilterImplementations } from './filter.js';
 
 export const implementations: FilterImplementations<typeof filterCatalog> = {
@@ -16,6 +16,11 @@ export const implementations: FilterImplementations<typeof filterCatalog> = {
       };
     }
     return { node: (node) => kinds.includes(node.kind) };
+  },
+  hasVulnerability: ({ minSeverity }) => {
+    // `unknown` ranks lowest, so a threshold of `low` or above never admits it.
+    const atLeast = SEVERITIES.indexOf(minSeverity ?? 'unknown');
+    return { node: (node) => node.vulnerabilities.some(({ severity }) => SEVERITIES.indexOf(severity) >= atLeast) };
   },
 };
 

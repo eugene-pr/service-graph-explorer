@@ -69,6 +69,18 @@ export const filtersFixture: FiltersResponse = {
       },
     },
     {
+      name: 'hasVulnerability',
+      description: 'Passes through a node with a vulnerability.',
+      position: 'any',
+      params: {
+        type: 'object',
+        properties: {
+          minSeverity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'], description: 'Lowest severity that counts.' },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
       name: 'passesThroughFixture',
       description: 'Passes through the named node.',
       position: 'any',

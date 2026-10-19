@@ -2,6 +2,7 @@ import type { FilterCatalog, Query } from '@sge/domain';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createFilters } from '../filters/filter.js';
+import type { Graph } from '../graph/graph.js';
 import { DEFAULT_GRAPH_FILE, loadGraph, loadGraphFile } from '../graph/loadGraph.js';
 import { fixtureCatalog, fixtureFilters, fixtureImplementations } from '../test/fixtureFilters.js';
 import { findRoutes, QueryError } from './findRoutes.js';
@@ -20,6 +21,19 @@ const graph = loadGraph({
     { from: 'x', to: 'b' },
   ],
 });
+
+/** The errors of the `QueryError` that running `query` throws. */
+const errorsOf = (query: Query, on: Graph = graph) => {
+  try {
+    findRoutes(on, query, { limit: 100, filters: fixtureFilters });
+  } catch (error) {
+    if (error instanceof QueryError) return error.errors;
+  }
+  throw new Error('Expected a QueryError');
+};
+
+/** The three Filters the task requires, combined. */
+const toxicQuery = { and: [{ filter: 'startsAtPublic' }, { filter: 'endsAtSink' }, { filter: 'hasVulnerability' }] };
 
 describe('findRoutes', () => {
   it('with an empty Query, returns Routes from Entries to nodes with no outgoing edges', () => {
@@ -153,15 +167,6 @@ describe('findRoutes', () => {
   });
 
   describe('errors', () => {
-    const errorsOf = (query: Query) => {
-      try {
-        findRoutes(graph, query, { limit: 100, filters: fixtureFilters });
-      } catch (error) {
-        if (error instanceof QueryError) return error.errors;
-      }
-      throw new Error('Expected a QueryError');
-    };
-
     it('rejects an unknown Filter, naming it', () => {
       const [error, ...rest] = errorsOf({ and: [{ filter: 'nope' }] });
 
@@ -218,17 +223,87 @@ describe('endsAtSink', () => {
   it('rejects a kind not present in the graph, naming the Filter and param', () => {
     const query = { and: [{ filter: 'endsAtSink', params: { kinds: ['rds', 'mongo'] } }] };
 
-    const error = (() => {
-      try {
-        findRoutes(sinks, query, { limit: 100 });
-      } catch (error) {
-        return error;
-      }
-    })();
+    const errors = errorsOf(query, sinks);
 
-    expect(error).toBeInstanceOf(QueryError);
-    expect(error instanceof QueryError && error.errors).toMatchObject([{ filter: 'endsAtSink', param: 'kinds' }]);
-    expect(error instanceof QueryError && error.errors[0]?.message).toMatch(/"mongo"/);
+    expect(errors).toMatchObject([{ filter: 'endsAtSink', param: 'kinds' }]);
+    expect(errors[0]?.message).toMatch(/"mongo"/);
+  });
+});
+
+describe('hasVulnerability', () => {
+  const vulnerable = (name: string, ...severities: string[]) => ({
+    ...service(name),
+    vulnerabilities: severities.map((severity) => ({ file: `${name}.java`, severity, message: 'finding' })),
+  });
+
+  // s -> v-<severity> for each severity, s -> clean; v-mixed holds a low and a high
+  const bySeverity = loadGraph({
+    nodes: [
+      service('s'),
+      vulnerable('v-unknown', 'bogus'),
+      vulnerable('v-low', 'low'),
+      vulnerable('v-medium', 'medium'),
+      vulnerable('v-high', 'high'),
+      vulnerable('v-critical', 'critical'),
+      vulnerable('v-mixed', 'low', 'high'),
+      service('clean'),
+    ],
+    edges: [{ from: 's', to: ['v-unknown', 'v-low', 'v-medium', 'v-high', 'v-critical', 'v-mixed', 'clean'] }],
+  });
+  const lastNodes = (params?: Record<string, unknown>) =>
+    findRoutes(bySeverity, { and: [{ filter: 'hasVulnerability', ...(params && { params }) }] }, { limit: 100 }).routes.map(
+      (route) => route.at(-1),
+    );
+
+  it('without `minSeverity`, matches a Route through any vulnerable node, including `unknown` severity', () => {
+    expect(lastNodes()).toEqual(['v-unknown', 'v-low', 'v-medium', 'v-high', 'v-critical', 'v-mixed']);
+  });
+
+  it('matches when the vulnerable node is anywhere on the Route, not only at its end', () => {
+    // entry(vulnerable) -> mid -> end
+    const vulnerableEntry = loadGraph({
+      nodes: [vulnerable('entry', 'low'), service('mid'), service('end')],
+      edges: [
+        { from: 'entry', to: 'mid' },
+        { from: 'mid', to: 'end' },
+      ],
+    });
+
+    expect(findRoutes(vulnerableEntry, { and: [{ filter: 'hasVulnerability' }] }, { limit: 100 }).routes).toEqual([['entry', 'mid', 'end']]);
+  });
+
+  it.each([
+    ['low', ['v-low', 'v-medium', 'v-high', 'v-critical', 'v-mixed']],
+    ['medium', ['v-medium', 'v-high', 'v-critical', 'v-mixed']],
+    ['high', ['v-high', 'v-critical', 'v-mixed']],
+    ['critical', ['v-critical']],
+  ])('with `minSeverity: %s`, matches that severity or above, never `unknown`', (minSeverity, expected) => {
+    expect(lastNodes({ minSeverity })).toEqual(expected);
+  });
+
+  it('rejects a `minSeverity` outside low/medium/high/critical, naming the Filter and param', () => {
+    for (const minSeverity of ['unknown', 'severe']) {
+      expect(errorsOf({ and: [{ filter: 'hasVulnerability', params: { minSeverity } }] }, bySeverity)).toMatchObject([
+        { filter: 'hasVulnerability', param: 'minSeverity' },
+      ]);
+    }
+  });
+
+  it('with `startsAtPublic` + `endsAtSink` + `hasVulnerability`, returns only the Routes matching all three', () => {
+    // web(public) -> api(high) -> db(rds)    all three
+    // web(public) -> safe -> db(rds)         no vulnerability
+    // web(public) -> api(high) -> log        not a Sink
+    // internal -> api(high) -> db(rds)       not public
+    const toxic = loadGraph({
+      nodes: [service('web', true), vulnerable('api', 'high'), service('safe'), { name: 'db', kind: 'rds' }, service('log'), service('internal')],
+      edges: [
+        { from: 'web', to: ['api', 'safe'] },
+        { from: 'api', to: ['db', 'log'] },
+        { from: 'safe', to: 'db' },
+        { from: 'internal', to: 'api' },
+      ],
+    });
+    expect(findRoutes(toxic, toxicQuery, { limit: 100 }).routes).toEqual([['web', 'api', 'db']]);
   });
 });
 
@@ -303,6 +378,15 @@ describe('findRoutes on the bundled data', () => {
   it('finds no Route for `startsAtPublic` + `endsAtSink`', async () => {
     const real = await loadGraphFile(DEFAULT_GRAPH_FILE);
     const result = findRoutes(real, { and: [{ filter: 'startsAtPublic' }, { filter: 'endsAtSink' }] }, { limit: 1000 });
+
+    expect(result.routes).toEqual([]);
+    expect(result.meta.truncated).toBe(false);
+  });
+
+  // Implied by the empty `startsAtPublic` + `endsAtSink` above; kept as the task's headline Query on the real data.
+  it('finds no Route for `startsAtPublic` + `endsAtSink` + `hasVulnerability`', async () => {
+    const real = await loadGraphFile(DEFAULT_GRAPH_FILE);
+    const result = findRoutes(real, toxicQuery, { limit: 1000 });
 
     expect(result.routes).toEqual([]);
     expect(result.meta.truncated).toBe(false);

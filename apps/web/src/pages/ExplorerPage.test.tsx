@@ -175,6 +175,30 @@ describe('ExplorerPage', () => {
       await vi.waitFor(() => expect(requests.at(-1)?.get('endsAtSink.kinds')).toBe('rds'));
     });
 
+    it('offers hasVulnerability with an optional minSeverity select, sending none for any severity', async () => {
+      const user = userEvent.setup();
+      const requests = recordRoutesRequests();
+      renderWithQueryClient(<ExplorerPage />);
+
+      await user.click(await screen.findByRole('checkbox', { name: 'hasVulnerability' }));
+      const minSeverity = screen.getByRole('combobox', { name: /minSeverity/ });
+      expect(within(minSeverity).getAllByRole('option').map((option) => option.textContent)).toEqual([
+        'Any',
+        'low',
+        'medium',
+        'high',
+        'critical',
+      ]);
+
+      await user.click(screen.getByRole('button', { name: /run/i }));
+      await vi.waitFor(() => expect(requests.at(-1)?.get('filters')).toBe('hasVulnerability'));
+      expect(requests.at(-1)?.has('hasVulnerability.minSeverity')).toBe(false);
+
+      await user.selectOptions(minSeverity, 'high');
+      await user.click(screen.getByRole('button', { name: /run/i }));
+      await vi.waitFor(() => expect(requests.at(-1)?.get('hasVulnerability.minSeverity')).toBe('high'));
+    });
+
     it('reset returns to the default view', async () => {
       const user = userEvent.setup();
       recordRoutesRequests((params) => (params.get('filters') === 'startsAtPublic' ? [['frontend', 'assurance-service']] : entryRoutes));

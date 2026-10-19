@@ -33,7 +33,7 @@ describe('GET /api/filters', () => {
 
     expect(res.statusCode).toBe(200);
     const { filters } = FiltersResponse.parse(res.json());
-    expect(filters.map((f) => f.name)).toEqual(['startsAtEntry', 'startsAtPublic', 'endsAtSink', 'visits', 'endsAtKind', 'maxHops']);
+    expect(filters.map((f) => f.name)).toEqual(['startsAtEntry', 'startsAtPublic', 'endsAtSink', 'hasVulnerability', 'visits', 'endsAtKind', 'maxHops']);
     expect(filters.find((f) => f.name === 'visits')).toMatchObject({
       description: 'Passes through the named node.',
       position: 'any',
