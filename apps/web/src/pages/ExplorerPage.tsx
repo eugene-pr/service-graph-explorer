@@ -6,9 +6,8 @@ import { useFilterCatalog } from '../hooks/useFilterCatalog';
 import { useGraph } from '../hooks/useGraph';
 import { DEFAULT_QUERY, useQueryState } from '../hooks/useQueryState';
 import { useRoutes } from '../hooks/useRoutes';
-import { withFilter } from '../lib/queryString';
-import { isTreeQuery, withTopLevelLeaf, type ExplorerQuery } from '../lib/queryTree';
-import { writeQueryUrl } from '../lib/queryUrl';
+import type { ExplorerQuery } from '../lib/queryTree';
+import { queryKey, withFilterLeaf } from '../lib/queryUrl';
 import { WarningsBanner } from '../molecules/WarningsBanner';
 import { EmptyRoutes } from '../organisms/EmptyRoutes';
 import { GraphCanvas } from '../organisms/GraphCanvas';
@@ -44,18 +43,12 @@ export function ExplorerPage() {
   const current = routes.isError || routes.isPlaceholderData ? undefined : routes.data;
   const runQuery = (next: ExplorerQuery) => {
     // Same Query: same cache key, so setting it again wouldn't refetch. Run it again explicitly.
-    if (writeQueryUrl(next).toString() === writeQueryUrl(query).toString()) void routes.refetch();
+    if (queryKey(next) === queryKey(query)) void routes.refetch();
     else setQuery(next);
   };
 
-  const showRoutesThrough = (node: string): ExplorerQuery => {
-    if (isTreeQuery(query)) return { ...query, query: withTopLevelLeaf(query.query, { filter: PASSES_THROUGH, params: { node } }) };
-    return {
-      ...query,
-      filters: withFilter(query.filters, PASSES_THROUGH, true, catalog.data?.filters.map((f) => f.name)),
-      params: { ...query.params, [PASSES_THROUGH]: { node } },
-    };
-  };
+  const showRoutesThrough = (node: string) =>
+    withFilterLeaf(query, { filter: PASSES_THROUGH, params: { node } }, catalog.data?.filters.map((f) => f.name));
 
   const routesError = routes.error && {
     message: `Couldn't run the Query: ${routes.error.message}`,

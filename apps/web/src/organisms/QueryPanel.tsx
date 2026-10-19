@@ -5,9 +5,8 @@ import { Input } from '../atoms/Input';
 import { Toggle } from '../atoms/Toggle';
 import { FilterToggle } from '../molecules/FilterToggle';
 import { ParamInputs } from '../molecules/ParamInput';
-import { withFilter } from '../lib/queryString';
 import { isTreeQuery, toTree, type ExplorerQuery } from '../lib/queryTree';
-import { readQueryUrl, writeQueryUrl } from '../lib/queryUrl';
+import { readQueryUrl, withFilter, writeQueryUrl } from '../lib/queryUrl';
 import { QueryTreeBuilder } from './QueryTreeBuilder';
 
 interface QueryPanelProps {

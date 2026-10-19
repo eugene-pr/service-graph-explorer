@@ -2,8 +2,8 @@ import type { FlatQuery } from '@sge/domain';
 import { Button } from '../atoms/Button';
 import { useFilterCatalog } from '../hooks/useFilterCatalog';
 import { useFilterRoutes } from '../hooks/useRoutes';
-import { onlyFilter } from '../lib/queryString';
 import { isTreeQuery, type ExplorerQuery } from '../lib/queryTree';
+import { onlyFilter } from '../lib/queryUrl';
 import { formatRouteCount } from '../lib/routeCount';
 
 interface EmptyRoutesProps {
