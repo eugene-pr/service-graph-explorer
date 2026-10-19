@@ -12,8 +12,13 @@ const flowNodes = new WeakMap<Layout, ServiceFlowNode[]>();
 /** A Route's identity survives a reordered result without storing server data in the UI store. */
 export const routeKey = (route: readonly string[]) => JSON.stringify(route);
 
-function layoutNodes(graph: GraphResponse, aspect: number): ServiceFlowNode[] {
-  const layout = layoutGraph(graph, aspect);
+/** What the layout covers: the matched nodes and edges when only they are shown, else the whole graph. */
+export function layoutSource(graph: GraphResponse, result: RoutesResponse | undefined, matchedOnly: boolean) {
+  return matchedOnly && result ? result : graph;
+}
+
+function layoutNodes(graph: GraphResponse, source: ReturnType<typeof layoutSource>, aspect: number): ServiceFlowNode[] {
+  const layout = layoutGraph(source, aspect);
   const cached = flowNodes.get(layout);
   if (cached) return cached;
 
@@ -65,7 +70,7 @@ export function toFlowGraph(
       .map(({ id }) => id),
   );
 
-  const nodes = layoutNodes(graph, aspect).map((node) => ({
+  const nodes = layoutNodes(graph, layoutSource(graph, result, matchedOnly), aspect).map((node) => ({
     ...node,
     position: positions?.[node.id] ?? node.position,
     selected: node.id === selectedNode,

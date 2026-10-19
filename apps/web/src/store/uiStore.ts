@@ -10,9 +10,11 @@ interface UiState {
   selectedRoute: string | undefined;
   selectRoute: (key: string) => void;
   clearRouteHighlight: () => void;
-  /** Positions of nodes the user dragged, by node name; they outlive Query changes. */
+  /** Positions of nodes the user dragged, by node name; they outlive Query changes until a relayout. */
   nodePositions: Record<string, { x: number; y: number }>;
   moveNode: (name: string, position: { x: number; y: number }) => void;
+  /** A relayout replaces every position, dragged ones included. */
+  clearNodePositions: () => void;
 }
 
 export const useUiStore = create<UiState>()((set) => ({
@@ -25,4 +27,5 @@ export const useUiStore = create<UiState>()((set) => ({
   clearRouteHighlight: () => set({ selectedRoute: undefined, hoveredRoute: undefined }),
   nodePositions: {},
   moveNode: (name, position) => set((s) => ({ nodePositions: { ...s.nodePositions, [name]: position } })),
+  clearNodePositions: () => set({ nodePositions: {} }),
 }));

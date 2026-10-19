@@ -3,7 +3,7 @@ import { Background, Controls, MiniMap, ReactFlow, type ReactFlowInstance } from
 import '@xyflow/react/dist/style.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { layoutGraph } from '../lib/layout';
-import { selectionAfter, toFlowGraph, type ServiceFlowNode } from '../lib/toFlowGraph';
+import { layoutSource, selectionAfter, toFlowGraph, type ServiceFlowNode } from '../lib/toFlowGraph';
 import { useUiStore } from '../store/uiStore';
 import { ServiceNode } from './ServiceNode';
 
@@ -48,16 +48,25 @@ export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelect
   const selectedRoute = useUiStore((s) => s.selectedRoute);
   const positions = useUiStore((s) => s.nodePositions);
   const moveNode = useUiStore((s) => s.moveNode);
+  const clearNodePositions = useUiStore((s) => s.clearNodePositions);
   const { ref, aspect } = useLayoutAspect(graph);
   const { nodes, edges } = useMemo(
     () => toFlowGraph(graph, result, { hoveredRoute, selectedRoute, selectedNode, matchedOnly, aspect, positions }),
     [graph, result, hoveredRoute, selectedRoute, selectedNode, matchedOnly, aspect, positions],
   );
+  // Matched only lays out just the matched nodes; switching what the layout covers drops dragged positions.
+  const source = layoutSource(graph, result, matchedOnly);
+  const laidOut = useRef(source);
+  useEffect(() => {
+    if (laidOut.current === source) return;
+    laidOut.current = source;
+    clearNodePositions();
+  }, [source, clearNodePositions]);
   // The `fitView` prop fits only the first layout; refit each new one.
   const flow = useRef<ReactFlowInstance<ServiceFlowNode>>(null);
   useEffect(() => {
     void flow.current?.fitView(fitViewOptions);
-  }, [aspect]);
+  }, [aspect, source]);
 
   return (
     <section ref={ref} aria-label="Service graph" className="size-full">

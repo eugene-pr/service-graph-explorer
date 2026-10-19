@@ -18,6 +18,16 @@ const findNode = async (name: string) => {
 /** A plain click: user-event's mousedown has no `view` in jsdom, which the canvas's pan handler (d3-zoom) reads. */
 const clickNode = async (name: string) => fireEvent.click(await findNode(name));
 
+const nodeGroup = async (name: string) =>
+  within(await screen.findByRole('region', { name: /service graph/i })).findByRole('group', { name });
+
+/** jsdom rejects `view` in a MouseEvent init, but the canvas's drag handler (d3-drag) reads it. */
+const mouse = (target: Element | Window, type: string, clientX: number, clientY: number) => {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY });
+  Object.defineProperty(event, 'view', { value: window });
+  fireEvent(target, event);
+};
+
 const nodeDetails = () => screen.getByRole('region', { name: /node details/i });
 
 const routeButtons = async () => {
@@ -866,16 +876,6 @@ describe('ExplorerPage', () => {
   });
 
   describe('dragging nodes', () => {
-    const nodeGroup = async (name: string) =>
-      within(await screen.findByRole('region', { name: /service graph/i })).findByRole('group', { name });
-
-    /** jsdom rejects `view` in a MouseEvent init, but the canvas's drag handler (d3-drag) reads it. */
-    const mouse = (target: Element | Window, type: string, clientX: number, clientY: number) => {
-      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY });
-      Object.defineProperty(event, 'view', { value: window });
-      fireEvent(target, event);
-    };
-
     const dragNode = async (name: string, by: { x: number; y: number }) => {
       const group = await nodeGroup(name);
       mouse(group, 'mousedown', 0, 0);
@@ -913,6 +913,72 @@ describe('ExplorerPage', () => {
       const minimap = await screen.findByRole('img', { name: /service graph overview/i });
       expect(minimap.querySelectorAll('.react-flow__minimap-node')).toHaveLength(4);
       expect(minimap.querySelector('.react-flow__minimap-mask')).toBeInTheDocument();
+    });
+  });
+
+  describe('Matched only relayout', () => {
+    const viewport = () => {
+      const element = screen.getByRole('region', { name: /service graph/i }).querySelector<HTMLElement>('.react-flow__viewport');
+      if (!element) throw new Error('No viewport');
+      return element;
+    };
+    /** One Route through a chain: lays out differently from the full graph, where `assurance-service` sits beside `auth-service`. */
+    const renderOneRoute = async () => {
+      server.use(http.get('*/api/routes', () => HttpResponse.json(routesFixture([entryRoutes[0]!]))));
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('1 Route');
+      const group = await nodeGroup('auth-service');
+      // The canvas is measured in a later frame, which lays the graph out again for its aspect ratio.
+      await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+      await vi.waitFor(() => expect(group.style.transform).toMatch(/translate/));
+      return group;
+    };
+
+    it('lays out only the matched nodes and refits the view, then restores the full-graph layout', async () => {
+      const user = userEvent.setup();
+      const group = await renderOneRoute();
+      const full = group.style.transform;
+      await vi.waitFor(() => expect(viewport().style.transform).toMatch(/translate/));
+      const fullView = viewport().style.transform;
+
+      await user.click(screen.getByRole('checkbox', { name: 'Matched only' }));
+
+      await vi.waitFor(() => expect(group.style.transform).not.toBe(full));
+      await vi.waitFor(() => expect(viewport().style.transform).not.toBe(fullView));
+
+      await user.click(screen.getByRole('checkbox', { name: 'Matched only' }));
+
+      await vi.waitFor(async () => expect((await nodeGroup('auth-service')).style.transform).toBe(full));
+      await vi.waitFor(() => expect(viewport().style.transform).toBe(fullView));
+    });
+
+    it('clears dragged positions when Matched only relayouts, in either direction', async () => {
+      const user = userEvent.setup();
+      const toggle = () => user.click(screen.getByRole('checkbox', { name: 'Matched only' }));
+      const transform = async () => (await nodeGroup('auth-service')).style.transform;
+      const drag = async () => {
+        const before = await transform();
+        mouse(await nodeGroup('auth-service'), 'mousedown', 0, 0);
+        mouse(window, 'mousemove', 150, 100);
+        mouse(window, 'mousemove', 300, 200);
+        await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+        mouse(window, 'mouseup', 300, 200);
+        await vi.waitFor(async () => expect(await transform()).not.toBe(before));
+      };
+      const full = (await renderOneRoute()).style.transform;
+      await toggle();
+      await vi.waitFor(async () => expect(await transform()).not.toBe(full));
+      const matched = await transform();
+      await toggle();
+      await vi.waitFor(async () => expect(await transform()).toBe(full));
+
+      await drag();
+      await toggle();
+      await vi.waitFor(async () => expect(await transform()).toBe(matched));
+
+      await drag();
+      await toggle();
+      await vi.waitFor(async () => expect(await transform()).toBe(full));
     });
   });
 
