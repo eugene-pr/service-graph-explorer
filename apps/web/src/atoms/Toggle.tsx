@@ -6,7 +6,7 @@ export function Toggle({ className = '', ...props }: ToggleProps) {
   return (
     <input
       type="checkbox"
-      className={`size-4 accent-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${className}`}
+      className={`size-4 accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue ${className}`}
       {...props}
     />
   );

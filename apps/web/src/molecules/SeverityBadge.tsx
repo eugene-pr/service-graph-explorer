@@ -2,11 +2,11 @@ import type { Severity } from '@sge/domain';
 import { Badge } from '../atoms/Badge';
 
 const severityColors: Record<Severity, string> = {
-  critical: 'bg-red-800 text-white',
-  high: 'bg-red-100 text-red-900',
-  medium: 'bg-amber-100 text-amber-900',
-  low: 'bg-sky-100 text-sky-900',
-  unknown: 'bg-slate-200 text-slate-800',
+  critical: 'bg-severity-critical-bg text-severity-critical',
+  high: 'bg-severity-high-bg text-severity-high',
+  medium: 'bg-severity-medium-bg text-severity-medium',
+  low: 'bg-severity-low-bg text-severity-low',
+  unknown: 'bg-surface text-text-muted',
 };
 
 interface SeverityBadgeProps {

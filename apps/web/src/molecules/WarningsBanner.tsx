@@ -5,7 +5,7 @@ interface WarningsBannerProps {
 export function WarningsBanner({ warnings }: WarningsBannerProps) {
   if (warnings.length === 0) return null;
   return (
-    <section aria-labelledby="data-warnings-title" className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950">
+    <section aria-labelledby="data-warnings-title" className="border-b border-severity-medium bg-severity-medium-bg px-4 py-2 text-sm text-ink">
       <h2 id="data-warnings-title" className="font-semibold">
         Data warnings ({warnings.length})
       </h2>

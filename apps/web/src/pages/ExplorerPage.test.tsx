@@ -751,9 +751,11 @@ describe('ExplorerPage', () => {
     renderWithQueryClient(<ExplorerPage />);
 
     const frontend = await findNode('frontend');
+    expect(frontend).toHaveAttribute('data-entry', 'true');
     expect(within(frontend).getByText('public')).toBeInTheDocument();
 
     const auth = await findNode('auth-service');
+    expect(auth).toHaveAttribute('data-entry', 'false');
     expect(within(auth).getByText('high')).toBeInTheDocument();
     expect(within(auth).queryByText('public')).not.toBeInTheDocument();
 
@@ -794,7 +796,7 @@ describe('ExplorerPage', () => {
     renderWithQueryClient(<ExplorerPage />);
 
     const legend = await screen.findByRole('region', { name: /legend/i });
-    for (const label of ['public', 'critical', 'high', 'medium', 'low', 'unknown', 'Service', 'Sink', 'Inferred Node']) {
+    for (const label of ['public', 'critical', 'high', 'medium', 'low', 'unknown', 'Service', 'Entry', 'Sink', 'Inferred Node']) {
       expect(within(legend).getByText(label)).toBeInTheDocument();
     }
   });

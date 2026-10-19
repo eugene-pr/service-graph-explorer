@@ -61,11 +61,11 @@ function Member({ node, path, context, onChange, onRemove }: MemberProps) {
   const title = [labelOf(inner), position].filter(Boolean).join(' ');
   const name = `${negated ? 'NOT ' : ''}${title}`;
   return (
-    <fieldset className={`space-y-2 rounded border border-slate-200 p-2 ${negated ? 'border-l-4 border-l-amber-500' : ''}`}>
-      <legend className="px-1 font-mono text-xs font-semibold text-slate-900">
+    <fieldset className={`space-y-2 rounded border border-border p-2 ${negated ? 'border-l-4 border-l-accent' : ''}`}>
+      <legend className="px-1 font-mono text-xs font-semibold text-ink">
         {negated && 'NOT '}
         {labelOf(inner)}
-        {position && <> <span className="font-normal text-slate-500">{position}</span></>}
+        {position && <> <span className="font-normal text-text-muted">{position}</span></>}
       </legend>
       <div className="flex gap-1">
         <Button
@@ -124,7 +124,7 @@ function GroupBody({ group, title, path, context, onChange }: GroupBodyProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <label htmlFor={`${id}-operator`} className="shrink-0 text-xs text-slate-700">
+        <label htmlFor={`${id}-operator`} className="shrink-0 text-xs text-text-muted">
           Match
         </label>
         <Select id={`${id}-operator`} value={op} onChange={(e) => onChange(makeGroup(e.target.value === 'or' ? 'or' : 'and', members))}>
@@ -133,7 +133,7 @@ function GroupBody({ group, title, path, context, onChange }: GroupBodyProps) {
         </Select>
       </div>
       {members.length === 0 ? (
-        <p className="text-xs text-slate-500">Empty: {op === 'and' ? 'matches every Route' : 'matches no Route'}.</p>
+        <p className="text-xs text-text-muted">Empty: {op === 'and' ? 'matches every Route' : 'matches no Route'}.</p>
       ) : (
         <ul className="space-y-2">
           {members.map((member, i) => (
@@ -190,7 +190,7 @@ function Leaf({ leaf, path, context, onChange }: LeafProps) {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-slate-600">{info?.description ?? 'Unknown Filter.'}</p>
+      <p className="text-xs text-text-muted">{info?.description ?? 'Unknown Filter.'}</p>
       {info && (
         <ParamInputs
           idPrefix={idOf(path)}

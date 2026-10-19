@@ -29,6 +29,7 @@ export const VulnerableService: Story = {
     ),
   },
 };
+export const Entry: Story = { args: { entry: true, children: 'frontend' } };
 export const Sink: Story = { args: { sink: true, children: 'prod-postgresdb' } };
 export const InferredService: Story = { args: { inferred: true, children: 'assurance-service' } };
 export const InferredSink: Story = { args: { sink: true, inferred: true, children: 'orders-db' } };

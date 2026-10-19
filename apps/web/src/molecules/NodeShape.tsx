@@ -1,16 +1,22 @@
 import type { ReactNode } from 'react';
 
 interface NodeShapeProps {
-  /** Sinks get a cylinder-like outline; services a rectangle. */
+  /** Sinks get a cylinder-like outline with a lavender fill; services a rectangle. */
   sink: boolean;
-  /** Inferred Nodes get a dashed border. */
+  /** Inferred Nodes get a dashed border and muted text. */
   inferred: boolean;
+  /** Entries render navy with white text. */
+  entry?: boolean;
   className?: string;
   children?: ReactNode;
 }
 
-export function NodeShape({ sink, inferred, className = '', children }: NodeShapeProps) {
-  const shape = sink ? 'rounded-[50%/14px] bg-teal-50' : 'rounded-md bg-white';
-  const border = inferred ? 'border-dashed border-slate-500' : 'border-solid border-slate-400';
-  return <div className={`border-2 ${shape} ${border} ${className}`}>{children}</div>;
+export function NodeShape({ sink, inferred, entry = false, className = '', children }: NodeShapeProps) {
+  const shape = sink ? 'rounded-[50%/14px]' : 'rounded-sm';
+  const fill = entry ? 'bg-entry text-entry-fg' : sink ? 'bg-sink' : 'bg-white';
+  const text = entry ? '' : inferred ? 'text-inferred-fg' : 'text-ink';
+  const border = inferred
+    ? 'border-dashed border-inferred-border'
+    : `border-solid ${sink ? 'border-sink-border' : entry ? 'border-entry' : 'border-border'}`;
+  return <div className={`border-2 ${shape} ${fill} ${text} ${border} ${className}`}>{children}</div>;
 }

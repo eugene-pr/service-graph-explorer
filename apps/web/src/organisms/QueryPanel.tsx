@@ -72,7 +72,7 @@ export function QueryPanel({ filters, query, defaultQuery, nodeKinds, effectiveQ
       }}
     >
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-slate-900">Query</h2>
+        <h2 className="font-semibold text-ink">Query</h2>
         <label className="flex items-center gap-2 text-sm">
           <Toggle
             checked={advanced}
@@ -97,7 +97,7 @@ export function QueryPanel({ filters, query, defaultQuery, nodeKinds, effectiveQ
         <QueryTreeBuilder filters={filters} tree={tree} onChange={setTree} nodeKinds={nodeKinds} />
       ) : (
         <fieldset className="space-y-3">
-          <legend className="mb-2 text-xs text-slate-600">Routes must match every Filter that is on.</legend>
+          <legend className="mb-2 text-xs text-text-muted">Routes must match every Filter that is on.</legend>
           {filters.map(({ name, description, params }) => (
             <FilterToggle key={name} name={name} description={description} checked={active.has(name)} onChange={(on) => toggle(name, on)}>
               <ParamInputs
@@ -113,7 +113,7 @@ export function QueryPanel({ filters, query, defaultQuery, nodeKinds, effectiveQ
         </fieldset>
       )}
       <div className="space-y-1">
-        <label htmlFor="query-limit" className="block text-xs font-medium text-slate-700">
+        <label htmlFor="query-limit" className="block text-xs font-medium text-text-muted">
           Limit
         </label>
         <Input
@@ -130,7 +130,7 @@ export function QueryPanel({ filters, query, defaultQuery, nodeKinds, effectiveQ
         />
       </div>
       {errors.length > 0 && (
-        <ul role="alert" className="list-disc space-y-1 rounded border border-red-300 bg-red-50 px-6 py-2 text-sm text-red-900">
+        <ul role="alert" className="list-disc space-y-1 rounded border border-severity-critical bg-severity-critical-bg px-6 py-2 text-sm text-ink">
           {errors.map((error) => <li key={error}>{error}</li>)}
         </ul>
       )}
@@ -151,11 +151,11 @@ export function QueryPanel({ filters, query, defaultQuery, nodeKinds, effectiveQ
       </div>
       {advanced && effectiveQuery && (
         <section aria-labelledby="effective-query-heading" className="space-y-1">
-          <h3 id="effective-query-heading" className="text-xs font-medium text-slate-700">
+          <h3 id="effective-query-heading" className="text-xs font-medium text-text-muted">
             Effective Query
           </h3>
-          <p className="text-xs text-slate-500">What the engine last ran, including any default it added.</p>
-          <pre tabIndex={0} className="max-h-48 overflow-auto rounded bg-slate-100 p-2 font-mono text-xs text-slate-800 focus-visible:outline-2 focus-visible:outline-indigo-600">
+          <p className="text-xs text-text-muted">What the engine last ran, including any default it added.</p>
+          <pre tabIndex={0} className="max-h-48 overflow-auto rounded bg-surface p-2 font-mono text-xs text-ink focus-visible:outline-2 focus-visible:outline-blue">
             {JSON.stringify(effectiveQuery, null, 2)}
           </pre>
         </section>

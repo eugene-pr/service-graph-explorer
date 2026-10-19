@@ -3,7 +3,7 @@ import { MarkerType, type Edge, type Node, type NodeChange } from '@xyflow/react
 import { layoutGraph, NODE_HEIGHT, NODE_WIDTH, type Layout } from './layout';
 
 export type ServiceFlowNode = Node<
-  { node: GraphNode; sink: boolean; highlighted?: boolean | undefined },
+  { node: GraphNode; sink: boolean; entry: boolean; highlighted?: boolean | undefined },
   'service'
 >;
 
@@ -18,6 +18,7 @@ function layoutNodes(graph: GraphResponse, aspect: number): ServiceFlowNode[] {
   if (cached) return cached;
 
   const sinkKinds = new Set(graph.meta.sinkKinds);
+  const targets = new Set(graph.edges.map(({ target }) => target));
   const nodes = graph.nodes.map(({ id, data }): ServiceFlowNode => ({
     id,
     type: 'service',
@@ -25,16 +26,16 @@ function layoutNodes(graph: GraphResponse, aspect: number): ServiceFlowNode[] {
     position: layout.positions.get(id) ?? { x: 0, y: 0 },
     width: NODE_WIDTH,
     height: NODE_HEIGHT,
-    data: { node: data, sink: sinkKinds.has(data.kind) },
+    data: { node: data, sink: sinkKinds.has(data.kind), entry: !targets.has(id) },
   }));
   flowNodes.set(layout, nodes);
   return nodes;
 }
 
 const edgeStyles = {
-  normal: {},
-  highlighted: { stroke: '#4338ca', strokeWidth: 2 },
-  dimmed: { opacity: 0.15 },
+  normal: { stroke: 'var(--color-text-faint)' },
+  highlighted: { stroke: 'var(--color-accent)', strokeWidth: 2 },
+  dimmed: { stroke: 'var(--color-text-faint)', opacity: 0.15 },
 };
 
 /** Convert and style the graph without changing its inputs. Layout fits a canvas of `aspect` (width / height). */
@@ -78,7 +79,7 @@ export function toFlowGraph(
     return {
       ...edge,
       hidden: matchedOnly && !!matchedEdges && !matchedEdges.has(edge.id),
-      markerEnd: { type: MarkerType.ArrowClosed, ...(highlighted && { color: edgeStyles.highlighted.stroke }) },
+      markerEnd: { type: MarkerType.ArrowClosed, color: edgeStyles[state].stroke },
       style: edgeStyles[state],
       zIndex: highlighted ? 1 : 0,
       domAttributes,

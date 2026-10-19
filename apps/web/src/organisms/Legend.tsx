@@ -4,15 +4,16 @@ import { PublicBadge } from '../molecules/PublicBadge';
 import { SeverityBadge } from '../molecules/SeverityBadge';
 
 const shapes = [
-  { label: 'Service', sink: false, inferred: false },
-  { label: 'Sink', sink: true, inferred: false },
-  { label: 'Inferred Node', sink: false, inferred: true },
+  { label: 'Service', sink: false, inferred: false, entry: false },
+  { label: 'Entry', sink: false, inferred: false, entry: true },
+  { label: 'Sink', sink: true, inferred: false, entry: false },
+  { label: 'Inferred Node', sink: false, inferred: true, entry: false },
 ];
 
 export function Legend() {
   return (
-    <section aria-labelledby="legend-title" className="space-y-3 text-sm text-slate-700">
-      <h2 id="legend-title" className="font-semibold text-slate-900">
+    <section aria-labelledby="legend-title" className="space-y-3 text-sm text-text-muted">
+      <h2 id="legend-title" className="font-semibold text-ink">
         Legend
       </h2>
       <dl className="space-y-2">
@@ -32,9 +33,9 @@ export function Legend() {
         </div>
       </dl>
       <ul className="space-y-1.5">
-        {shapes.map(({ label, sink, inferred }) => (
+        {shapes.map(({ label, sink, inferred, entry }) => (
           <li key={label} className="flex items-center gap-2">
-            <NodeShape sink={sink} inferred={inferred} className="h-5 w-9 shrink-0" />
+            <NodeShape sink={sink} inferred={inferred} entry={entry} className="h-5 w-9 shrink-0" />
             <span>{label}</span>
           </li>
         ))}

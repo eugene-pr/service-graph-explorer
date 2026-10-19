@@ -6,7 +6,7 @@ import { SeverityBadge } from '../molecules/SeverityBadge';
 import { highestSeverity } from '../lib/graph';
 import type { ServiceFlowNode } from '../lib/toFlowGraph';
 
-export function ServiceNode({ data: { node, sink, highlighted }, selected }: NodeProps<ServiceFlowNode>) {
+export function ServiceNode({ data: { node, sink, entry, highlighted }, selected }: NodeProps<ServiceFlowNode>) {
   const severity = highestSeverity(node);
   const vulnCount = node.vulnerabilities.length;
 
@@ -14,6 +14,7 @@ export function ServiceNode({ data: { node, sink, highlighted }, selected }: Nod
     <div
       data-node={node.name}
       data-sink={sink}
+      data-entry={entry}
       data-inferred={node.inferred}
       data-highlighted={highlighted}
       data-selected={selected}
@@ -23,9 +24,10 @@ export function ServiceNode({ data: { node, sink, highlighted }, selected }: Nod
       <NodeShape
         sink={sink}
         inferred={node.inferred}
-        className={`flex size-full flex-col items-center justify-center gap-1 px-3 shadow-sm ${selected ? 'ring-4 ring-amber-500 ring-offset-1' : highlighted ? 'ring-2 ring-indigo-600 ring-offset-1' : ''}`}
+        entry={entry}
+        className={`flex size-full flex-col items-center justify-center gap-1 px-3 ${selected ? 'shadow-hard-accent ring-2 ring-accent' : highlighted ? 'ring-2 ring-accent ring-offset-1' : ''}`}
       >
-        <span className="max-w-full truncate text-sm font-medium text-slate-900" title={node.name}>
+        <span className="max-w-full truncate text-sm font-medium" title={node.name}>
           {node.name}
         </span>
         <span className="flex flex-wrap justify-center gap-1">

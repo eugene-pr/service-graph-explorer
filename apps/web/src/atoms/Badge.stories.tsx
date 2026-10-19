@@ -6,4 +6,4 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
-export const Colored: Story = { args: { className: 'bg-indigo-100 text-indigo-900', title: 'Shown on hover' } };
+export const Colored: Story = { args: { className: 'bg-accent text-white', title: 'Shown on hover' } };

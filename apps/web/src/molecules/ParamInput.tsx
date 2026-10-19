@@ -26,9 +26,9 @@ export function ParamInput({ id, name, schema, required, value, onChange, option
 
   return (
     <div className="space-y-1">
-      <label htmlFor={id} className="block text-xs font-medium text-slate-700">
+      <label htmlFor={id} className="block text-xs font-medium text-text-muted">
         {name}
-        {!required && <span className="font-normal text-slate-500"> (optional)</span>}
+        {!required && <span className="font-normal text-text-muted"> (optional)</span>}
       </label>
       {schema.enum ? (
         <Select {...common} onChange={(e) => onChange(e.target.value)}>
@@ -45,7 +45,7 @@ export function ParamInput({ id, name, schema, required, value, onChange, option
         />
       )}
       {hint && (
-        <p id={`${id}-hint`} className="text-xs text-slate-500">
+        <p id={`${id}-hint`} className="text-xs text-text-muted">
           {hint}
         </p>
       )}
@@ -106,20 +106,20 @@ function ParamCheckboxes({ id, name, description, value, onChange, options }: Pa
 
   return (
     <fieldset className="space-y-1" aria-describedby={description ? `${id}-hint` : undefined}>
-      <legend className="text-xs font-medium text-slate-700">
+      <legend className="text-xs font-medium text-text-muted">
         {name}
-        <span className="font-normal text-slate-500"> (optional)</span>
+        <span className="font-normal text-text-muted"> (optional)</span>
       </legend>
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         {options.map((option) => (
-          <label key={option} className="flex items-center gap-1.5 font-mono text-xs text-slate-800">
+          <label key={option} className="flex items-center gap-1.5 font-mono text-xs text-ink">
             <Toggle checked={checked.has(option)} onChange={(e) => toggle(option, e.target.checked)} />
             {option}
           </label>
         ))}
       </div>
       {description && (
-        <p id={`${id}-hint`} className="text-xs text-slate-500">
+        <p id={`${id}-hint`} className="text-xs text-text-muted">
           {description} None checked: the default.
         </p>
       )}

@@ -65,11 +65,11 @@ export function ExplorerPage() {
       sidebar={
         <>
           {catalog.isPending ? (
-            <p role="status" className="flex items-center gap-2 text-sm text-slate-600">
+            <p role="status" className="flex items-center gap-2 text-sm text-text-muted">
               <Spinner /> Loading Filters…
             </p>
           ) : catalog.isError ? (
-            <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+            <p role="alert" className="rounded border border-severity-critical bg-severity-critical-bg px-3 py-2 text-sm text-ink">
               Couldn't load the Filters: {catalog.error.message}
             </p>
           ) : (
@@ -92,11 +92,11 @@ export function ExplorerPage() {
       }
       main={
         graph.isPending ? (
-          <p role="status" className="flex h-full items-center justify-center gap-2 text-sm text-slate-600">
+          <p role="status" className="flex h-full items-center justify-center gap-2 text-sm text-text-muted">
             <Spinner /> Loading graph…
           </p>
         ) : graph.isError ? (
-          <p role="alert" className="m-4 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <p role="alert" className="m-4 rounded border border-severity-critical bg-severity-critical-bg px-4 py-3 text-sm text-ink">
             Couldn't load the graph: {graph.error.message}
           </p>
         ) : (

@@ -23,10 +23,10 @@ export function FilterToggle({ name, description, checked, onChange, children }:
           onChange={(e) => onChange(e.target.checked)}
         />
         <div>
-          <label htmlFor={id} className="font-mono text-sm font-medium text-slate-900">
+          <label htmlFor={id} className="font-mono text-sm font-medium text-ink">
             {name}
           </label>
-          <p id={`${id}-description`} className="text-xs text-slate-600">
+          <p id={`${id}-description`} className="text-xs text-text-muted">
             {description}
           </p>
         </div>

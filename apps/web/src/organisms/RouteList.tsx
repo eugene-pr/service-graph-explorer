@@ -33,14 +33,14 @@ export function RouteList({ result, isPending, isUpdating = false, error, emptyS
 
   return (
     <section aria-labelledby="route-list-title" className="space-y-3 text-sm">
-      <h2 id="route-list-title" className="font-semibold text-slate-900">
+      <h2 id="route-list-title" className="font-semibold text-ink">
         Routes
       </h2>
-      <p id="route-list-help" className="text-xs text-slate-600">
+      <p id="route-list-help" className="text-xs text-text-muted">
         Hover to preview. Click or use arrow keys and Enter to select. Escape clears the highlight.
       </p>
       {error ? (
-        <div role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-red-900">
+        <div role="alert" className="rounded border border-severity-critical bg-severity-critical-bg px-3 py-2 text-ink">
           <p>{error.message}</p>
           {error.details.length > 0 && (
             <ul className="mt-1 list-disc pl-5">
@@ -51,21 +51,21 @@ export function RouteList({ result, isPending, isUpdating = false, error, emptyS
           )}
         </div>
       ) : isPending || !result ? (
-        <p role="status" className="flex items-center gap-2 text-slate-600">
+        <p role="status" className="flex items-center gap-2 text-text-muted">
           <Spinner /> Finding Routes…
         </p>
       ) : (
         <>
           {isUpdating && (
-            <p role="status" className="flex items-center gap-2 text-slate-600">
+            <p role="status" className="flex items-center gap-2 text-text-muted">
               <Spinner /> Updating Routes for the new Query…
             </p>
           )}
-          <p className="text-slate-700">
+          <p className="text-text-muted">
             {formatRouteCount(result.meta.routeCount)}
           </p>
           {result.meta.truncated && (
-            <p role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950">
+            <p role="status" className="rounded border border-severity-medium bg-severity-medium-bg px-3 py-2 text-ink">
               Showing the first {result.meta.limit}. More Routes match; narrow the Query or raise the limit.
             </p>
           )}
@@ -101,7 +101,7 @@ export function RouteList({ result, isPending, isUpdating = false, error, emptyS
                   onClick={() => selectRoute(routeKey(route))}
                   onMouseEnter={() => hoverRoute(routeKey(route))}
                   onMouseLeave={() => hoverRoute(undefined)}
-                  className={`w-full rounded border p-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${selectedRoute === routeKey(route) ? 'border-indigo-600 bg-indigo-50' : 'border-slate-200 bg-white'}`}
+                  className={`w-full rounded border p-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue ${selectedRoute === routeKey(route) ? 'border-accent bg-accent-soft' : 'border-border bg-white'}`}
                 >
                   <RouteChip route={route} />
                 </button>
