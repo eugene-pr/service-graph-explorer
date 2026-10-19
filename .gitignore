@@ -6,3 +6,4 @@ coverage/
 *.pdf
 test-results/
 playwright-report/
+storybook-static/

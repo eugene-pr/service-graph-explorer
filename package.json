@@ -12,6 +12,8 @@
     "test": "pnpm -r test",
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
+    "storybook": "pnpm --filter @sge/web storybook",
+    "build-storybook": "pnpm --filter @sge/web build-storybook",
     "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "e2e": "pnpm build && pnpm --filter @sge/e2e e2e"
   },
