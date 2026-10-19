@@ -7,7 +7,7 @@ import { useGraph } from '../hooks/useGraph';
 import { DEFAULT_QUERY, useQueryState } from '../hooks/useQueryState';
 import { useRoutes } from '../hooks/useRoutes';
 import type { ExplorerQuery } from '../lib/queryTree';
-import { queryKey, withFilterLeaf } from '../lib/queryUrl';
+import { queryIdentity, withFilterLeaf } from '../lib/queryUrl';
 import { WarningsBanner } from '../molecules/WarningsBanner';
 import { EmptyRoutes } from '../organisms/EmptyRoutes';
 import { GraphCanvas } from '../organisms/GraphCanvas';
@@ -43,7 +43,7 @@ export function ExplorerPage() {
   const current = routes.isError || routes.isPlaceholderData ? undefined : routes.data;
   const runQuery = (next: ExplorerQuery) => {
     // Same Query: same cache key, so setting it again wouldn't refetch. Run it again explicitly.
-    if (queryKey(next) === queryKey(query)) void routes.refetch();
+    if (queryIdentity(next) === queryIdentity(query)) void routes.refetch();
     else setQuery(next);
   };
 

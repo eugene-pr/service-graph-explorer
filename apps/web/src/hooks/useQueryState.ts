@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore, type SetStateAction } from 'react';
-import { DEFAULT_QUERY, queryKey, readQueryUrl, writeQueryUrl } from '../lib/queryUrl';
+import { DEFAULT_QUERY, queryIdentity, readQueryUrl, writeQueryUrl } from '../lib/queryUrl';
 import type { ExplorerQuery } from '../lib/queryTree';
 
 export { DEFAULT_QUERY } from '../lib/queryUrl';
@@ -33,7 +33,7 @@ export function useQueryState() {
   const search = useSyncExternalStore(subscribe, getSearch);
   const state = useMemo(() => readQueryUrl(search), [search]);
   // Keep the Query identity stable during view changes so the panel keeps its unsubmitted edits.
-  const querySearch = queryKey(state.query);
+  const querySearch = queryIdentity(state.query);
   const query = useMemo(() => readQueryUrl(querySearch).query, [querySearch]);
   const { matchedOnly } = state;
   return useMemo(() => {

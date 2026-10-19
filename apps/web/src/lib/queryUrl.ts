@@ -40,7 +40,7 @@ export function writeQueryUrl(query: ExplorerQuery): URLSearchParams {
 }
 
 /** The Query's identity: equal keys run the same Query. */
-export const queryKey = (query: ExplorerQuery): string => writeQueryUrl(query).toString();
+export const queryIdentity = (query: ExplorerQuery): string => writeQueryUrl(query).toString();
 
 /**
  * `query` with `leaf` added as a top-level Filter, replacing one of the same Filter, in either form.

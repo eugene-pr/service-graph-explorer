@@ -499,6 +499,20 @@ describe('ExplorerPage', () => {
       expect(screen.getByRole('checkbox', { name: 'Advanced' })).not.toBeChecked();
     });
 
+    it('Reset discards unrun drafts when the Query is already the default', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('2 Routes');
+
+      await user.click(screen.getByRole('checkbox', { name: 'startsAtPublic' }));
+      await user.click(screen.getByRole('checkbox', { name: 'Advanced' }));
+      await user.click(screen.getByRole('button', { name: 'Reset' }));
+
+      expect(window.location.search).toBe('');
+      expect(screen.getByRole('checkbox', { name: 'Advanced' })).not.toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'startsAtPublic' })).not.toBeChecked();
+    });
+
     it.each([
       ['not base64url', 'q=%%%'],
       ['not JSON', `q=${btoa('{').replace(/=+$/, '')}`],

@@ -21,6 +21,7 @@ interface QueryPanelProps {
   /** The Query the engine last ran, with its defaults added; shown in advanced mode. */
   effectiveQuery: Query | undefined;
   onRun: (query: ExplorerQuery) => void;
+  /** Must remount the panel (e.g. by changing its `key`): that is what discards the drafts. */
   onReset: () => void;
 }
 
