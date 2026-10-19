@@ -4,8 +4,6 @@ import swaggerUi from '@fastify/swagger-ui';
 import { FiltersResponse, GraphResponse, HealthResponse, Limit, Problem, RoutesQueryRequest, RoutesResponse } from '@sge/domain';
 import Fastify, { type FastifyServerOptions } from 'fastify';
 import {
-  jsonSchemaTransform,
-  jsonSchemaTransformObject,
   serializerCompiler,
   validatorCompiler,
   type FastifyPluginCallbackZod,
@@ -16,6 +14,7 @@ import type { Filters } from './filters/filter.js';
 import { filters as catalogFilters } from './filters/index.js';
 import type { Graph } from './graph/graph.js';
 import { parseFlatQuery } from './http/flatQuery.js';
+import { routeDocs } from './http/routeDocs.js';
 import { useProblemDetails, type NotFoundFallback } from './http/problem.js';
 
 export interface AppOptions extends FastifyServerOptions {
@@ -42,12 +41,13 @@ export function buildApp(graph: Graph, { filters = catalogFilters, webDist, ...o
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   useProblemDetails(app, webDist ? spaFallback : undefined);
+  // Bodies are JSON only; anything else is a 415.
+  app.removeContentTypeParser('text/plain');
   if (webDist) void app.register(fastifyStatic, { root: webDist });
 
   void app.register(swagger, {
     openapi: { info: { title: 'Service Graph Explorer API', version: '1.0.0' } },
-    transform: jsonSchemaTransform,
-    transformObject: jsonSchemaTransformObject,
+    ...routeDocs(filters),
   });
   void app.register(swaggerUi, { routePrefix: '/docs' });
 

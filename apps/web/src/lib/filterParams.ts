@@ -1,4 +1,4 @@
-import { filterCatalog, FilterInfo, type ParamJsonSchema } from '@sge/domain';
+import { filterCatalog, FilterInfo, queryParamSchema, type ParamJsonSchema } from '@sge/domain';
 
 /** Each Filter's params schema, and its params as JSON Schema for decoding input strings. */
 export const filterDefinitions = new Map(Object.entries(filterCatalog).map(([name, definition]) => [name, {
@@ -6,15 +6,9 @@ export const filterDefinitions = new Map(Object.entries(filterCatalog).map(([nam
   properties: FilterInfo.shape.params.parse(definition.params.toJSONSchema({ io: 'input' })).properties,
 }]));
 
-/** A param value from its query-string form: lists are comma-separated, numbers are parsed. */
-export function decodeParam(value: string, schema: ParamJsonSchema | undefined): unknown {
-  switch (schema?.type) {
-    case 'array': return value.split(',').map((item) => decodeParam(item.trim(), schema.items));
-    case 'number':
-    case 'integer': return value.trim() === '' ? value : Number(value);
-    default: return value;
-  }
-}
+/** Decode through the same domain schema as the API. */
+export const decodeParam = (value: string, schema: ParamJsonSchema | undefined): unknown =>
+  queryParamSchema(schema).parse(value);
 
 /** A param value in query-string form; the inverse of `decodeParam`. */
 export function encodeParam(value: unknown): string {

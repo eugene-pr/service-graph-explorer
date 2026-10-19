@@ -41,6 +41,10 @@ export function useProblemDetails(app: FastifyInstance, notFoundFallback?: NotFo
       }));
       return sendProblem(reply, 400, `The request's ${error.validationContext ?? 'input'} is invalid.`, errors);
     }
+    if (error instanceof Error && 'statusCode' in error && typeof error.statusCode === 'number'
+      && error.statusCode >= 400 && error.statusCode < 500) {
+      return sendProblem(reply, error.statusCode, error.message);
+    }
     request.log.error(error);
     return sendProblem(reply, 500, 'Something went wrong on the server.');
   });

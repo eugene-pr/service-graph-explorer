@@ -1,4 +1,4 @@
-import type { FilterLeaf, ParamJsonSchema, ProblemError, Query } from '@sge/domain';
+import { queryParamSchema, type FilterLeaf, type ProblemError, type Query } from '@sge/domain';
 import { QueryError } from '../engine/findRoutes.js';
 import type { Filters } from '../filters/filter.js';
 
@@ -35,27 +35,10 @@ export function parseFlatQuery(queryString: Record<string, unknown>, filters: Fi
       errors.push({ filter, param, message: `Param "${key}" can appear only once.` });
     } else {
       const schema = filters.get(filter)?.paramsJsonSchema.properties?.[param];
-      leaf.params = { ...leaf.params, [param]: decode(value, schema) };
+      leaf.params = { ...leaf.params, [param]: queryParamSchema(schema).parse(value) };
     }
   }
 
   if (errors.length > 0) throw new QueryError(errors);
   return { and: [...leaves.values()] };
-}
-
-/** Turns a query-string value into its param's type. Leaves undecodable values as strings for the schema to reject. */
-function decode(value: string, schema: ParamJsonSchema | undefined): unknown {
-  switch (schema?.type) {
-    case 'array':
-      return value.split(',').map((item) => decode(item.trim(), schema.items));
-    case 'number':
-    case 'integer': {
-      const number = Number(value);
-      return value.trim() !== '' && Number.isFinite(number) ? number : value;
-    }
-    case 'boolean':
-      return value === 'true' ? true : value === 'false' ? false : value;
-    default:
-      return value;
-  }
 }
