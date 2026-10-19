@@ -1,44 +1,33 @@
 import type { GraphNode, GraphResponse, RoutesResponse } from '@sge/domain';
-import { Graph, layout, type EdgeLabel, type GraphLabel, type NodeLabel } from '@dagrejs/dagre';
 import { MarkerType, type Edge, type Node, type NodeChange } from '@xyflow/react';
+import { layoutGraph, NODE_HEIGHT, NODE_WIDTH, type Layout } from './layout';
 
 export type ServiceFlowNode = Node<
   { node: GraphNode; sink: boolean; highlighted?: boolean | undefined },
   'service'
 >;
 
-const NODE_WIDTH = 180;
-const NODE_HEIGHT = 60;
-const layouts = new WeakMap<GraphResponse, ServiceFlowNode[]>();
+const flowNodes = new WeakMap<Layout, ServiceFlowNode[]>();
 
 /** A Route's identity survives a reordered result without storing server data in the UI store. */
 export const routeKey = (route: readonly string[]) => JSON.stringify(route);
 
-function layoutGraph(graph: GraphResponse): ServiceFlowNode[] {
-  const cached = layouts.get(graph);
+function layoutNodes(graph: GraphResponse, aspect: number): ServiceFlowNode[] {
+  const layout = layoutGraph(graph, aspect);
+  const cached = flowNodes.get(layout);
   if (cached) return cached;
 
-  const g = new Graph<GraphLabel, NodeLabel, EdgeLabel>();
-  g.setGraph({ rankdir: 'TB', nodesep: 16, ranksep: 80 });
-  g.setDefaultEdgeLabel(() => ({}));
-  for (const { id } of graph.nodes) g.setNode(id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-  for (const { source, target } of graph.edges) g.setEdge(source, target);
-  layout(g);
-
   const sinkKinds = new Set(graph.meta.sinkKinds);
-  const nodes = graph.nodes.map(({ id, data }): ServiceFlowNode => {
-    const { x = 0, y = 0 } = g.node(id);
-    return {
-      id,
-      type: 'service',
-      ariaLabel: id,
-      position: { x: x - NODE_WIDTH / 2, y: y - NODE_HEIGHT / 2 },
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
-      data: { node: data, sink: sinkKinds.has(data.kind) },
-    };
-  });
-  layouts.set(graph, nodes);
+  const nodes = graph.nodes.map(({ id, data }): ServiceFlowNode => ({
+    id,
+    type: 'service',
+    ariaLabel: id,
+    position: layout.positions.get(id) ?? { x: 0, y: 0 },
+    width: NODE_WIDTH,
+    height: NODE_HEIGHT,
+    data: { node: data, sink: sinkKinds.has(data.kind) },
+  }));
+  flowNodes.set(layout, nodes);
   return nodes;
 }
 
@@ -48,15 +37,17 @@ const edgeStyles = {
   dimmed: { opacity: 0.15 },
 };
 
-/** Convert and style the graph without changing its inputs. Layout is reused for each graph object. */
+/** Convert and style the graph without changing its inputs. Layout fits a canvas of `aspect` (width / height). */
 export function toFlowGraph(
   graph: GraphResponse,
   result?: RoutesResponse,
-  { hoveredRoute, selectedRoute, selectedNode, matchedOnly = false }: {
+  { hoveredRoute, selectedRoute, selectedNode, matchedOnly = false, aspect = 16 / 10 }: {
     hoveredRoute?: string | undefined;
     selectedRoute?: string | undefined;
     selectedNode?: string | undefined;
     matchedOnly?: boolean;
+    /** Canvas width / height; a 16:10 canvas until measured. */
+    aspect?: number | undefined;
   } = {},
 ): { nodes: ServiceFlowNode[]; edges: Edge[] } {
   // A removed hover preview must not mask a selection that still belongs to the current result.
@@ -71,7 +62,7 @@ export function toFlowGraph(
       .map(({ id }) => id),
   );
 
-  const nodes = layoutGraph(graph).map((node) => ({
+  const nodes = layoutNodes(graph, aspect).map((node) => ({
     ...node,
     selected: node.id === selectedNode,
     hidden: matchedOnly && !!matchedNodes && !matchedNodes.has(node.id),
