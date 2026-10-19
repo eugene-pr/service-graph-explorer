@@ -8,6 +8,7 @@ import { DEFAULT_QUERY, useQueryState } from '../hooks/useQueryState';
 import { useRoutes } from '../hooks/useRoutes';
 import { toSearchParams, withFilter } from '../lib/queryString';
 import { WarningsBanner } from '../molecules/WarningsBanner';
+import { EmptyRoutes } from '../organisms/EmptyRoutes';
 import { GraphCanvas } from '../organisms/GraphCanvas';
 import { Legend } from '../organisms/Legend';
 import { NodeDetails } from '../organisms/NodeDetails';
@@ -101,6 +102,7 @@ export function ExplorerPage() {
           isPending={routes.isPending}
           isUpdating={routes.isPlaceholderData}
           error={routesError ?? undefined}
+          emptyState={<EmptyRoutes query={query} onApply={runQuery} />}
         />}
       bottom={
         selected && (

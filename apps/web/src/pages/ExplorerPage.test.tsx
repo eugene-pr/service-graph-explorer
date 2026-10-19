@@ -36,6 +36,149 @@ const detailRows = (details: HTMLElement) =>
   Object.fromEntries([...details.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
 
 describe('ExplorerPage', () => {
+  describe('empty results', () => {
+    it('explains an empty Query and loads each active Filter count in parallel with its own params and limit', async () => {
+      window.history.replaceState(null, '', '/?filters=startsAtPublic,endsAtSink,hasVulnerability&endsAtSink.kinds=rds&hasVulnerability.minSeverity=high&limit=2');
+      const requests: URLSearchParams[] = [];
+      let release = () => {};
+      const released = new Promise<void>((resolve) => (release = resolve));
+      server.use(http.get('*/api/routes', async ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        const filter = params.get('filters');
+        if (filter?.includes(',')) return HttpResponse.json(routesFixture([]));
+        requests.push(params);
+        await released;
+        const routes = filter === 'startsAtPublic' ? entryRoutes : filter === 'endsAtSink' ? [entryRoutes[0]!] : [];
+        return HttpResponse.json(routesFixture(routes, { limit: 2 }));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+
+      try {
+        const list = await screen.findByRole('region', { name: 'Routes' });
+        expect(await within(list).findByText(/no Routes match this Query/i)).toBeInTheDocument();
+        expect(within(list).getByText(/try removing a Filter/i)).toBeInTheDocument();
+        // All requests must arrive before any response is released.
+        await vi.waitFor(() => expect(requests).toHaveLength(3));
+        expect(requests.map((params) => Object.fromEntries(params))).toEqual(expect.arrayContaining([
+          { filters: 'startsAtPublic', limit: '2' },
+          { filters: 'endsAtSink', 'endsAtSink.kinds': 'rds', limit: '2' },
+          { filters: 'hasVulnerability', 'hasVulnerability.minSeverity': 'high', limit: '2' },
+        ]));
+        release();
+
+        expect(await within(list).findByRole('button', { name: /startsAtPublic only.*2 Routes/ })).toBeInTheDocument();
+        expect(await within(list).findByRole('button', { name: /endsAtSink only.*1 Route/ })).toBeInTheDocument();
+        expect(await within(list).findByRole('button', { name: /hasVulnerability only.*0 Routes/ })).toBeInTheDocument();
+      } finally {
+        release();
+      }
+    });
+
+    it('applies only the chosen Filter, preserving its params, limit and view in the URL and panel', async () => {
+      const user = userEvent.setup();
+      window.history.replaceState(null, '', '/?filters=endsAtSink,hasVulnerability&endsAtSink.kinds=rds&hasVulnerability.minSeverity=high&limit=5&view=matched');
+      const requests: URLSearchParams[] = [];
+      server.use(http.get('*/api/routes', ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        requests.push(params);
+        return HttpResponse.json(routesFixture(params.get('filters')?.includes(',') ? [] : [entryRoutes[0]!], { limit: 5 }));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByRole('checkbox', { name: 'hasVulnerability' });
+
+      const hint = await screen.findByRole('button', { name: /hasVulnerability only.*1 Route/ });
+      await user.click(hint);
+
+      const list = screen.getByRole('region', { name: 'Routes' });
+      expect(await within(list).findByText('1 Route')).toBeInTheDocument();
+      expect(within(list).getByRole('button', { name: 'Route: frontend → auth-service → prod-postgresdb' })).toBeInTheDocument();
+      expect(within(list).queryByText(/no Routes match/i)).not.toBeInTheDocument();
+      expect(Object.fromEntries(new URLSearchParams(window.location.search))).toEqual({
+        filters: 'hasVulnerability', 'hasVulnerability.minSeverity': 'high', limit: '5', view: 'matched',
+      });
+      expect(screen.getByRole('checkbox', { name: 'hasVulnerability' })).toBeChecked();
+      expect(screen.getByRole('combobox', { name: /minSeverity/ })).toHaveValue('high');
+      expect(screen.getByRole('checkbox', { name: 'endsAtSink' })).not.toBeChecked();
+      expect(screen.getByRole('spinbutton', { name: 'Limit' })).toHaveValue(5);
+      expect(requests.filter((params) => params.get('filters') === 'hasVulnerability')).toHaveLength(1);
+    });
+
+    it('labels bounded counts and keeps a failed count distinct from zero', async () => {
+      window.history.replaceState(null, '', '/?filters=startsAtPublic,endsAtSink&limit=1');
+      server.use(http.get('*/api/routes', ({ request }) => {
+        const filter = new URL(request.url).searchParams.get('filters');
+        if (filter === 'endsAtSink') return HttpResponse.json({ title: 'Unavailable' }, { status: 500 });
+        return HttpResponse.json(routesFixture(filter === 'startsAtPublic' ? [entryRoutes[0]!] : [], {
+          truncated: filter === 'startsAtPublic', limit: 1,
+        }));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+
+      expect(await screen.findByRole('button', { name: /startsAtPublic only.*At least 1 Route/ })).toBeInTheDocument();
+      const failed = await screen.findByRole('button', { name: /endsAtSink only.*count unavailable/i });
+      expect(failed).not.toHaveTextContent('0 Routes');
+      expect(screen.getByText(/no Routes match this Query/i)).toBeInTheDocument();
+    });
+
+    it.each(['/', '/?filters=hasVulnerability'])('explains an empty result without redundant count requests for %s', async (url) => {
+      window.history.replaceState(null, '', url);
+      const requests: URLSearchParams[] = [];
+      server.use(http.get('*/api/routes', ({ request }) => {
+        requests.push(new URL(request.url).searchParams);
+        return HttpResponse.json(routesFixture([]));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+
+      expect(await screen.findByText(/no Routes match this Query/i)).toBeInTheDocument();
+      const list = screen.getByRole('region', { name: 'Routes' });
+      if (url === '/') {
+        expect(within(list).queryByRole('button')).not.toBeInTheDocument();
+        expect(within(list).getByText(/try choosing a start Filter/i)).toBeInTheDocument();
+      } else {
+        expect(await within(list).findByRole('button', { name: /hasVulnerability only.*0 Routes/ })).toBeInTheDocument();
+      }
+      expect(requests).toHaveLength(1);
+    });
+
+    it('hides old empty-state hints while a new Query runs and stops showing them when it matches', async () => {
+      const user = userEvent.setup();
+      window.history.replaceState(null, '', '/?filters=startsAtPublic,endsAtSink');
+      const requests: string[] = [];
+      let release = () => {};
+      const released = new Promise<void>((resolve) => (release = resolve));
+      server.use(http.get('*/api/routes', async ({ request }) => {
+        const filters = new URL(request.url).searchParams.get('filters') ?? '';
+        requests.push(filters);
+        if (filters.includes('maxLength')) {
+          await released;
+          return HttpResponse.json(routesFixture(entryRoutes));
+        }
+        return HttpResponse.json(routesFixture(filters.includes(',') ? [] : entryRoutes));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+
+      try {
+        await screen.findByRole('button', { name: /startsAtPublic only.*2 Routes/ });
+        await screen.findByRole('button', { name: /endsAtSink only.*2 Routes/ });
+        await user.click(screen.getByRole('checkbox', { name: 'maxLength' }));
+        await user.type(screen.getByRole('spinbutton', { name: 'hops' }), '2');
+        await user.click(screen.getByRole('button', { name: 'Run' }));
+
+        const list = screen.getByRole('region', { name: 'Routes' });
+        expect(await within(list).findByRole('status')).toHaveTextContent(/updating/i);
+        expect(within(list).queryByText(/no Routes match/i)).not.toBeInTheDocument();
+        expect(within(list).queryByRole('button', { name: /only/ })).not.toBeInTheDocument();
+        release();
+        expect(await within(list).findByText('2 Routes')).toBeInTheDocument();
+        expect(within(list).queryByText(/try removing a Filter/i)).not.toBeInTheDocument();
+        expect(requests).toEqual(expect.arrayContaining(['startsAtPublic,endsAtSink', 'startsAtPublic', 'endsAtSink', 'startsAtPublic,endsAtSink,maxLength']));
+        expect(requests).toHaveLength(4);
+      } finally {
+        release();
+      }
+    });
+  });
+
   describe('Query URL', () => {
     it('preserves the active Query and invalid draft until Filter parameters are corrected', async () => {
       const user = userEvent.setup();

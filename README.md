@@ -15,6 +15,10 @@ The default Query runs on first load and lists Routes starting at Entries. Run a
 
 While a new Query runs, the previous Routes are labelled as updating and their highlight is removed until the current results arrive. Clicking a graph node still opens its details independently of Route selection.
 
+When no Routes match, the Route list explains the empty result and suggests removing a Filter. Each active Filter has a hint showing how many Routes it matches on its own, using its current parameters and the current limit. These requests run in parallel through TanStack Query against the same `GET /api/routes` endpoint and share the normal Route cache. Counts marked **At least** were truncated by the limit; an unavailable count is labelled separately from zero. The engine's default Entry constraint still applies when a Filter does not set a starting position.
+
+Click a hint to apply just that Filter, keeping its parameters, the limit and view mode. The URL, Query panel and results update together. Hints appear only for the current Query's confirmed empty result. With no active Filters, the empty state suggests choosing a start Filter instead. All empty-state copy applies to any graph file.
+
 ## State and rendering
 
 TanStack Query owns graph, Filter Catalog and Route data. The single Zustand UI store holds the selected node and the identities of hovered and selected Routes. Components subscribe to the fields they use, so Route hover updates the canvas without rerendering the Query panel or page.

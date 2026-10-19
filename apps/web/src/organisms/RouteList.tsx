@@ -1,5 +1,5 @@
 import type { RoutesResponse } from '@sge/domain';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Spinner } from '../atoms/Spinner';
 import { RouteChip } from '../molecules/RouteChip';
 import { routeKey } from '../lib/toFlowGraph';
@@ -11,9 +11,10 @@ interface RouteListProps {
   /** `result` is from the previous Query while this one runs. */
   isUpdating?: boolean;
   error?: { message: string; details: readonly string[] } | undefined;
+  emptyState?: ReactNode;
 }
 
-export function RouteList({ result, isPending, isUpdating = false, error }: RouteListProps) {
+export function RouteList({ result, isPending, isUpdating = false, error, emptyState }: RouteListProps) {
   const hoverRoute = useUiStore((s) => s.hoverRoute);
   const selectedRoute = useUiStore((s) => s.selectedRoute);
   const selectRoute = useUiStore((s) => s.selectRoute);
@@ -67,6 +68,7 @@ export function RouteList({ result, isPending, isUpdating = false, error }: Rout
               Showing the first {result.meta.limit}. More Routes match; narrow the Query or raise the limit.
             </p>
           )}
+          {result.meta.routeCount === 0 && !isUpdating && emptyState}
           <ol
             aria-busy={isUpdating}
             aria-describedby="route-list-help"
