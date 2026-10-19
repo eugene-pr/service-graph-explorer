@@ -1,12 +1,11 @@
 import type { FilterName, FlatQuery, ProblemError } from '@sge/domain';
-import { useMemo } from 'react';
 import { ApiError } from '../api/client';
 import { Spinner } from '../atoms/Spinner';
+import { Toggle } from '../atoms/Toggle';
 import { useFilterCatalog } from '../hooks/useFilterCatalog';
 import { useGraph } from '../hooks/useGraph';
 import { DEFAULT_QUERY, useQueryState } from '../hooks/useQueryState';
 import { useRoutes } from '../hooks/useRoutes';
-import { highlightOf } from '../lib/highlight';
 import { toSearchParams, withFilter } from '../lib/queryString';
 import { WarningsBanner } from '../molecules/WarningsBanner';
 import { GraphCanvas } from '../organisms/GraphCanvas';
@@ -25,7 +24,7 @@ const describeProblem = ({ filter, param, message }: ProblemError) =>
 export function ExplorerPage() {
   const graph = useGraph();
   const catalog = useFilterCatalog();
-  const { query, setQuery, reset } = useQueryState();
+  const { query, setQuery, reset, matchedOnly, setMatchedOnly } = useQueryState();
   const routes = useRoutes(query);
   const selectedNode = useUiStore((s) => s.selectedNode);
   const selectNode = useUiStore((s) => s.selectNode);
@@ -33,7 +32,6 @@ export function ExplorerPage() {
 
   // Placeholder data is the previous Query's result: don't present it as this Query's matches.
   const current = routes.isError || routes.isPlaceholderData ? undefined : routes.data;
-  const highlight = useMemo(() => current && highlightOf(current), [current]);
   const runQuery = (next: FlatQuery) => {
     // Same Query: same cache key, so setting it again wouldn't refetch. Run it again explicitly.
     if (toSearchParams(next).toString() === toSearchParams(query).toString()) void routes.refetch();
@@ -69,6 +67,10 @@ export function ExplorerPage() {
             />
           )}
           <Legend />
+          <label className="flex items-center gap-2 text-sm">
+            <Toggle checked={matchedOnly} onChange={(event) => setMatchedOnly(event.target.checked)} disabled={!current} />
+            Matched only
+          </label>
         </>
       }
       main={
@@ -81,7 +83,13 @@ export function ExplorerPage() {
             Couldn't load the graph: {graph.error.message}
           </p>
         ) : (
-          <GraphCanvas graph={graph.data} highlight={highlight} selectedNode={selectedNode} onSelectNode={selectNode} />
+          <GraphCanvas
+            graph={graph.data}
+            result={current}
+            matchedOnly={matchedOnly}
+            selectedNode={selectedNode}
+            onSelectNode={selectNode}
+          />
         )
       }
       aside={<RouteList

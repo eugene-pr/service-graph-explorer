@@ -10,12 +10,18 @@ export const DEFAULT_QUERY: FlatQuery = { filters: [], params: {}, limit: DEFAUL
  */
 export function useQueryState() {
   const [query, setQuery] = useState<FlatQuery>(DEFAULT_QUERY);
+  const [matchedOnly, setMatchedOnly] = useState(false);
   return useMemo(
     () => ({
       query,
       setQuery,
-      reset: () => setQuery(DEFAULT_QUERY),
+      matchedOnly,
+      setMatchedOnly,
+      reset: () => {
+        setQuery(DEFAULT_QUERY);
+        setMatchedOnly(false);
+      },
     }),
-    [query],
+    [query, matchedOnly],
   );
 }

@@ -20,11 +20,211 @@ const clickNode = async (name: string) => fireEvent.click(await findNode(name));
 
 const nodeDetails = () => screen.getByRole('region', { name: /node details/i });
 
+const routeButtons = async () => {
+  const list = await screen.findByRole('region', { name: /^routes/i });
+  await within(list).findByText('2 Routes');
+  return within(list).getAllByRole('button');
+};
+
+const findEdge = async (id: string) => {
+  const canvas = await screen.findByRole('region', { name: /service graph/i });
+  return within(canvas).findByTestId(`rf__edge-${id}`);
+};
+
 /** The details panel's fields as label → value. */
 const detailRows = (details: HTMLElement) =>
   Object.fromEntries([...details.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
 
 describe('ExplorerPage', () => {
+  describe('Route highlights', () => {
+    it('restores the selected Route when a hovered Route disappears after a Query update', async () => {
+      const user = userEvent.setup();
+      const extraNode = {
+        id: 'billing-service',
+        data: { name: 'billing-service', kind: 'service', publicExposed: false, vulnerabilities: [], inferred: false },
+      };
+      const extraEdge = { id: 'frontend->billing-service', source: 'frontend', target: 'billing-service' };
+      server.use(
+        http.get('*/api/graph', () => HttpResponse.json({
+          ...graphFixture, nodes: [...graphFixture.nodes, extraNode], edges: [...graphFixture.edges, extraEdge],
+        })),
+        http.get('*/api/routes', ({ request }) => {
+          const filters = new URL(request.url).searchParams.get('filters');
+          const result = routesFixture([
+            ...(filters === 'startsAtPublic' ? entryRoutes.slice(0, 1) : entryRoutes),
+            ['frontend', 'billing-service'],
+          ]);
+          return HttpResponse.json({ ...result, nodes: [...result.nodes, extraNode], edges: [...result.edges, extraEdge] });
+        }),
+      );
+      renderWithQueryClient(<ExplorerPage />);
+      const first = await screen.findByRole('button', { name: 'Route: frontend → auth-service → prod-postgresdb' });
+      await user.click(first);
+
+      // Prepare a different Query, then run it by keyboard while the pointer stays over the Route that disappears.
+      await user.click(screen.getByRole('checkbox', { name: 'startsAtPublic' }));
+      const run = screen.getByRole('button', { name: /run/i });
+      for (let i = 0; i < 30 && document.activeElement !== run; i++) await user.tab();
+      expect(run).toHaveFocus();
+      await user.hover(screen.getByRole('button', { name: 'Route: frontend → assurance-service' }));
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'false');
+      await user.keyboard('{Enter}');
+
+      await screen.findByText('2 Routes');
+      expect(first).toHaveAttribute('aria-pressed', 'true');
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findNode('billing-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findEdge('frontend->billing-service')).toHaveAttribute('data-highlighted', 'false');
+    });
+
+    it('dims an edge outside the selected Route even when both endpoints are highlighted', async () => {
+      const user = userEvent.setup();
+      const shortcut = { id: 'frontend->prod-postgresdb', source: 'frontend', target: 'prod-postgresdb' };
+      const result = routesFixture([...entryRoutes, ['frontend', 'prod-postgresdb']]);
+      server.use(
+        http.get('*/api/graph', () => HttpResponse.json({ ...graphFixture, edges: [...graphFixture.edges, shortcut] })),
+        http.get('*/api/routes', () => HttpResponse.json({ ...result, edges: [...result.edges, shortcut] })),
+      );
+      renderWithQueryClient(<ExplorerPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'Route: frontend → auth-service → prod-postgresdb' }));
+
+      expect(await findNode('frontend')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findNode('prod-postgresdb')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findEdge('frontend->auth-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findEdge('auth-service->prod-postgresdb')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findEdge('frontend->prod-postgresdb')).toHaveAttribute('data-highlighted', 'false');
+    });
+
+    it('Matched only shows an empty canvas when the Query has no matches', async () => {
+      const user = userEvent.setup();
+      server.use(http.get('*/api/routes', () => HttpResponse.json(routesFixture([]))));
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('0 Routes');
+      const frontend = await findNode('frontend');
+      expect(frontend).toHaveAttribute('data-highlighted', 'false');
+
+      await user.click(screen.getByRole('checkbox', { name: /matched only/i }));
+
+      const canvas = screen.getByRole('region', { name: /service graph/i });
+      expect(canvas.querySelector('[data-node]')).not.toBeInTheDocument();
+      expect(canvas.querySelector('[data-testid^="rf__edge-"]')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('checkbox', { name: /matched only/i }));
+      expect(await findNode('frontend')).toHaveAttribute('data-highlighted', 'false');
+    });
+
+    it('Matched only hides unmatched nodes and edges, keeps other matches dimmed, and restores the full graph', async () => {
+      const user = userEvent.setup();
+      server.use(http.get('*/api/graph', () => HttpResponse.json({
+        ...graphFixture,
+        nodes: [...graphFixture.nodes, {
+          id: 'unmatched-service',
+          data: { name: 'unmatched-service', kind: 'service', publicExposed: false, vulnerabilities: [], inferred: false },
+        }],
+        edges: [...graphFixture.edges, { id: 'frontend->unmatched-service', source: 'frontend', target: 'unmatched-service' }],
+      })));
+      renderWithQueryClient(<ExplorerPage />);
+      const [first] = await routeButtons();
+      if (!first) throw new Error('Expected a Route');
+      const unmatched = await findNode('unmatched-service');
+      expect(unmatched).toHaveAttribute('data-highlighted', 'false');
+      expect(await findEdge('frontend->unmatched-service')).toHaveAttribute('data-highlighted', 'false');
+
+      await user.click(first);
+      await user.click(screen.getByRole('checkbox', { name: /matched only/i }));
+
+      expect(unmatched).not.toBeInTheDocument();
+      expect(screen.queryByTestId('rf__edge-frontend->unmatched-service')).not.toBeInTheDocument();
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findEdge('frontend->assurance-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'true');
+
+      await user.click(screen.getByRole('checkbox', { name: /matched only/i }));
+      expect(await findNode('unmatched-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findEdge('frontend->unmatched-service')).toHaveAttribute('data-highlighted', 'false');
+    });
+
+    it('clicking keeps a Route highlighted, hovering previews another, and leaving restores the selection', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<ExplorerPage />);
+      const [first, second] = await routeButtons();
+      if (!first || !second) throw new Error('Expected two Routes');
+
+      await user.click(first);
+      await user.unhover(first);
+      expect(first).toHaveAttribute('aria-pressed', 'true');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'false');
+
+      await user.hover(second);
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'true');
+
+      await user.unhover(second);
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'false');
+
+      await user.keyboard('{Escape}');
+      expect(first).toHaveAttribute('aria-pressed', 'false');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'true');
+    });
+
+    it('Tab enters the Route list, arrows select, Enter keeps the selection, and Escape clears it', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<ExplorerPage />);
+      const [first, second] = await routeButtons();
+      if (!first || !second) throw new Error('Expected two Routes');
+
+      for (let i = 0; i < 30 && document.activeElement !== first; i++) await user.tab();
+      expect(first).toHaveFocus();
+      await user.keyboard('{ArrowDown}');
+
+      expect(second).toHaveFocus();
+      expect(second).toHaveAttribute('aria-pressed', 'true');
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findEdge('frontend->auth-service')).toHaveAttribute('data-highlighted', 'false');
+
+      await user.keyboard('{Enter}');
+      await user.tab();
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'false');
+      await user.tab({ shift: true });
+      expect(second).toHaveFocus();
+
+      await user.keyboard('{Escape}');
+      expect(second).toHaveAttribute('aria-pressed', 'false');
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findEdge('frontend->auth-service')).toHaveAttribute('data-highlighted', 'true');
+
+      await user.keyboard('{ArrowUp}');
+      expect(first).toHaveFocus();
+      expect(first).toHaveAttribute('aria-pressed', 'true');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'false');
+    });
+
+    it('hovering a Route highlights only its nodes and edges, then restores all matches on leave', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<ExplorerPage />);
+      const [, second] = await routeButtons();
+      if (!second) throw new Error('Expected a second Route');
+
+      await user.hover(second);
+
+      expect(await findNode('frontend')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findNode('prod-postgresdb')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findEdge('frontend->assurance-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findEdge('frontend->auth-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findEdge('auth-service->prod-postgresdb')).toHaveAttribute('data-highlighted', 'false');
+
+      await user.unhover(second);
+
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findEdge('frontend->auth-service')).toHaveAttribute('data-highlighted', 'true');
+    });
+  });
+
   it('renders every node of the graph with text-labelled badges', async () => {
     renderWithQueryClient(<ExplorerPage />);
 

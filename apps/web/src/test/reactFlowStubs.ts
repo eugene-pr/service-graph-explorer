@@ -2,8 +2,10 @@
 // Based on https://reactflow.dev/learn/advanced-use/testing
 
 class ResizeObserverStub {
+  private targets = new Set<Element>();
   constructor(private readonly callback: ResizeObserverCallback) {}
   observe(target: Element) {
+    this.targets.add(target);
     const { offsetWidth: width, offsetHeight: height } = target instanceof HTMLElement ? target : { offsetWidth: 1, offsetHeight: 1 };
     const contentRect = { x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height, toJSON: () => ({}) };
     const entry: ResizeObserverEntry = {
@@ -13,10 +15,13 @@ class ResizeObserverStub {
       contentBoxSize: [],
       devicePixelContentBoxSize: [],
     };
-    this.callback([entry], this);
+    // Browser observers fire after mount, once React Flow has registered its viewport.
+    requestAnimationFrame(() => {
+      if (this.targets.has(target)) this.callback([entry], this);
+    });
   }
-  unobserve() {}
-  disconnect() {}
+  unobserve(target: Element) { this.targets.delete(target); }
+  disconnect() { this.targets.clear(); }
 }
 
 class DOMMatrixReadOnlyStub {

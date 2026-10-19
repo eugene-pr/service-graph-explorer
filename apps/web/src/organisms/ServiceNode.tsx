@@ -1,21 +1,10 @@
-import type { GraphNode } from '@sge/domain';
-import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Badge } from '../atoms/Badge';
 import { NodeShape } from '../molecules/NodeShape';
 import { PublicBadge } from '../molecules/PublicBadge';
 import { SeverityBadge } from '../molecules/SeverityBadge';
 import { highestSeverity } from '../lib/graph';
-
-export type ServiceFlowNode = Node<
-  {
-    node: GraphNode;
-    /** Its kind is one of the graph's default Sink kinds, as served by the API. */
-    sink: boolean;
-    /** On a matched Route; undefined when no Query result is shown. */
-    highlighted?: boolean | undefined;
-  },
-  'service'
->;
+import type { ServiceFlowNode } from '../lib/toFlowGraph';
 
 export function ServiceNode({ data: { node, sink, highlighted }, selected }: NodeProps<ServiceFlowNode>) {
   const severity = highestSeverity(node);

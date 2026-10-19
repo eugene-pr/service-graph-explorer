@@ -1,6 +1,8 @@
 import type { RoutesResponse } from '@sge/domain';
 import { Spinner } from '../atoms/Spinner';
 import { RouteChip } from '../molecules/RouteChip';
+import { routeKey } from '../lib/toFlowGraph';
+import { useUiStore } from '../store/uiStore';
 
 interface RouteListProps {
   result: RoutesResponse | undefined;
@@ -11,11 +13,19 @@ interface RouteListProps {
 }
 
 export function RouteList({ result, isPending, isUpdating = false, error }: RouteListProps) {
+  const hoverRoute = useUiStore((s) => s.hoverRoute);
+  const selectedRoute = useUiStore((s) => s.selectedRoute);
+  const selectRoute = useUiStore((s) => s.selectRoute);
+  const clearRouteHighlight = useUiStore((s) => s.clearRouteHighlight);
+  const selectedIndex = result?.routes.findIndex((route) => routeKey(route) === selectedRoute) ?? -1;
   return (
     <section aria-labelledby="route-list-title" className="space-y-3 text-sm">
       <h2 id="route-list-title" className="font-semibold text-slate-900">
         Routes
       </h2>
+      <p id="route-list-help" className="text-xs text-slate-600">
+        Hover to preview. Click or use arrow keys and Enter to select. Escape clears the highlight.
+      </p>
       {error ? (
         <div role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-red-900">
           <p>{error.message}</p>
@@ -46,10 +56,41 @@ export function RouteList({ result, isPending, isUpdating = false, error }: Rout
               Showing the first {result.meta.limit}. More Routes match; narrow the Query or raise the limit.
             </p>
           )}
-          <ol aria-busy={isUpdating} className={`space-y-2 transition-opacity ${isUpdating ? 'opacity-50' : ''}`}>
-            {result.routes.map((route) => (
-              <li key={route.join('\u0000')} className="rounded border border-slate-200 bg-white p-2">
-                <RouteChip route={route} />
+          <ol
+            aria-busy={isUpdating}
+            aria-describedby="route-list-help"
+            className={`space-y-2 transition-opacity ${isUpdating ? 'opacity-50' : ''}`}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                clearRouteHighlight();
+              } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const buttons = [...event.currentTarget.querySelectorAll('button')];
+                const index = buttons.findIndex((button) => button === document.activeElement);
+                const next = (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+                const route = result.routes[next];
+                if (route) {
+                  buttons[next]?.focus();
+                  selectRoute(routeKey(route));
+                }
+              }
+            }}
+          >
+            {result.routes.map((route, index) => (
+              <li key={routeKey(route)}>
+                <button
+                  type="button"
+                  aria-label={`Route: ${route.join(' → ')}`}
+                  aria-pressed={selectedRoute === routeKey(route)}
+                  tabIndex={index === Math.max(0, selectedIndex) ? 0 : -1}
+                  onClick={() => selectRoute(routeKey(route))}
+                  onMouseEnter={() => hoverRoute(routeKey(route))}
+                  onMouseLeave={() => hoverRoute(undefined)}
+                  className={`w-full rounded border p-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${selectedRoute === routeKey(route) ? 'border-indigo-600 bg-indigo-50' : 'border-slate-200 bg-white'}`}
+                >
+                  <RouteChip route={route} />
+                </button>
               </li>
             ))}
           </ol>
