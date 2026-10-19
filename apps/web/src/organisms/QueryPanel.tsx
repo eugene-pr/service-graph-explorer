@@ -4,7 +4,8 @@ import { Button } from '../atoms/Button';
 import { Input } from '../atoms/Input';
 import { FilterToggle } from '../molecules/FilterToggle';
 import { ParamInput } from '../molecules/ParamInput';
-import { withFilter } from '../lib/queryString';
+import { readQueryUrl } from '../lib/queryUrl';
+import { toSearchParams, withFilter } from '../lib/queryString';
 
 interface QueryPanelProps {
   /** The Filter Catalog; the panel is generated from it. */
@@ -22,11 +23,13 @@ interface QueryPanelProps {
 /** Edits a draft Query; nothing runs until Run. */
 export function QueryPanel({ filters, query, defaultQuery, nodeKinds, onRun, onReset }: QueryPanelProps) {
   const [draft, setDraft] = useState(query);
+  const [errors, setErrors] = useState<string[]>([]);
   // A new Query, run from here or set from outside (e.g. "Show Routes through here"), replaces the draft.
   const [shown, setShown] = useState(query);
   if (query !== shown) {
     setShown(query);
     setDraft(query);
+    setErrors([]);
   }
   const active = new Set(draft.filters);
 
@@ -39,10 +42,13 @@ export function QueryPanel({ filters, query, defaultQuery, nodeKinds, onRun, onR
     <form
       aria-label="Query"
       className="space-y-4"
+      onChange={() => setErrors([])}
       onSubmit={(e) => {
         e.preventDefault();
         // Send params only for Filters that are on.
-        onRun({ ...draft, params: Object.fromEntries(draft.filters.map((f) => [f, draft.params[f] ?? {}])) });
+        const next = readQueryUrl(toSearchParams(draft).toString());
+        setErrors(next.errors);
+        if (!next.invalid) onRun(next.query);
       }}
     >
       <h2 className="font-semibold text-slate-900">Query</h2>
@@ -86,6 +92,11 @@ export function QueryPanel({ filters, query, defaultQuery, nodeKinds, onRun, onR
           }}
         />
       </div>
+      {errors.length > 0 && (
+        <ul role="alert" className="list-disc space-y-1 rounded border border-red-300 bg-red-50 px-6 py-2 text-sm text-red-900">
+          {errors.map((error) => <li key={error}>{error}</li>)}
+        </ul>
+      )}
       <div className="flex gap-2">
         <Button type="submit" variant="primary">
           Run
@@ -93,6 +104,7 @@ export function QueryPanel({ filters, query, defaultQuery, nodeKinds, onRun, onR
         <Button
           onClick={() => {
             setDraft(defaultQuery);
+            setErrors([]);
             onReset();
           }}
         >

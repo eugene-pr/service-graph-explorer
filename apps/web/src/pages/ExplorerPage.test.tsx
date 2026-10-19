@@ -37,6 +37,69 @@ const detailRows = (details: HTMLElement) =>
 
 describe('ExplorerPage', () => {
   describe('Query URL', () => {
+    it('preserves the active Query and invalid draft until Filter parameters are corrected', async () => {
+      const user = userEvent.setup();
+      window.history.replaceState(null, '', '/?filters=startsAtPublic&view=matched');
+      const requests: URLSearchParams[] = [];
+      server.use(http.get('*/api/routes', ({ request }) => {
+        requests.push(new URL(request.url).searchParams);
+        return HttpResponse.json(routesFixture([entryRoutes[0]!]));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('1 Route');
+      const originalUrl = window.location.href;
+      const originalHistoryLength = window.history.length;
+      await user.click(screen.getByRole('checkbox', { name: 'maxLength' }));
+      await user.type(screen.getByRole('spinbutton', { name: 'hops' }), '0');
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+
+      expect(window.location.href).toBe(originalUrl);
+      expect(window.history.length).toBe(originalHistoryLength);
+      expect(requests).toHaveLength(1);
+      expect(screen.getByRole('checkbox', { name: 'startsAtPublic' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'maxLength' })).toBeChecked();
+      expect(screen.getByRole('spinbutton', { name: 'hops' })).toHaveValue(0);
+      expect(screen.getByRole('checkbox', { name: 'Matched only' })).toBeChecked();
+      expect(within(screen.getByRole('form', { name: 'Query' })).getByRole('alert')).toHaveTextContent(/maxLength.hops/);
+      expect(screen.queryByText(/URL.*default Query/i)).not.toBeInTheDocument();
+      expect(screen.getByText('1 Route')).toBeInTheDocument();
+
+      await user.clear(screen.getByRole('spinbutton', { name: 'hops' }));
+      await user.type(screen.getByRole('spinbutton', { name: 'hops' }), '2');
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+      await vi.waitFor(() => expect(requests.at(-1)?.get('maxLength.hops')).toBe('2'));
+      const search = new URLSearchParams(window.location.search);
+      expect(search.get('filters')).toBe('startsAtPublic,maxLength');
+      expect(search.get('view')).toBe('matched');
+      expect(within(screen.getByRole('form', { name: 'Query' })).queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('hydrates whitespace-separated Sink kinds consistently and preserves them when another kind changes', async () => {
+      const user = userEvent.setup();
+      window.history.replaceState(null, '', '/?filters=endsAtSink&endsAtSink.kinds=rds,%20sqs');
+      server.use(http.get('*/api/graph', () => HttpResponse.json({
+        ...graphFixture,
+        meta: { ...graphFixture.meta, kinds: ['service', 'rds', 'sqs'], sinkKinds: ['rds', 'sqs'] },
+      })));
+      const requests: URLSearchParams[] = [];
+      server.use(http.get('*/api/routes', ({ request }) => {
+        requests.push(new URL(request.url).searchParams);
+        return HttpResponse.json(routesFixture(entryRoutes));
+      }));
+      renderWithQueryClient(<ExplorerPage />);
+
+      const kinds = await screen.findByRole('group', { name: /kinds/i });
+      expect(within(kinds).getByRole('checkbox', { name: 'rds' })).toBeChecked();
+      expect(within(kinds).getByRole('checkbox', { name: 'sqs' })).toBeChecked();
+      await screen.findByText('2 Routes');
+      expect(requests[0]?.get('endsAtSink.kinds')).toBe('rds,sqs');
+
+      await user.click(within(kinds).getByRole('checkbox', { name: 'service' }));
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+      await vi.waitFor(() => expect(requests.at(-1)?.get('endsAtSink.kinds')).toBe('service,rds,sqs'));
+      expect(new URLSearchParams(window.location.search).get('endsAtSink.kinds')).toBe('service,rds,sqs');
+    });
+
     it('keeps unsubmitted Filter edits when only the view mode changes', async () => {
       const user = userEvent.setup();
       renderWithQueryClient(<ExplorerPage />);

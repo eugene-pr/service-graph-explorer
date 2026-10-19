@@ -20,6 +20,8 @@ function updateUrl(update: (current: ReturnType<typeof readQueryUrl>) => { query
   const next = update(readQueryUrl(getSearch()));
   const search = toSearchParams(next.query);
   if (next.matchedOnly) search.set('view', 'matched');
+  // Invalid incoming URLs recover to defaults; invalid edits must leave the current Query intact.
+  if (readQueryUrl(search.toString()).invalid) return;
   const url = new URL(window.location.href);
   url.search = search.toString();
   if (url.href === window.location.href) return;
