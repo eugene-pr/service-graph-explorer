@@ -1,7 +1,8 @@
 import type { GraphResponse, RoutesResponse } from '@sge/domain';
-import { Background, Controls, MiniMap, ReactFlow, type ReactFlowInstance } from '@xyflow/react';
+import { Background, Controls, MiniMap, Panel, ReactFlow, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '../atoms/Button';
 import { layoutGraph } from '../lib/layout';
 import { layoutSource, selectionAfter, toFlowGraph, type ServiceFlowNode } from '../lib/toFlowGraph';
 import { useUiStore } from '../store/uiStore';
@@ -18,6 +19,7 @@ interface GraphCanvasProps {
   /** Name of the selected node. */
   selectedNode?: string | undefined;
   onSelectNode: (name: string | undefined) => void;
+  onReset: () => void;
 }
 
 /**
@@ -43,12 +45,18 @@ function useLayoutAspect(source: ReturnType<typeof layoutSource>) {
   return { ref, aspect };
 }
 
-export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelectNode }: GraphCanvasProps) {
+export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelectNode, onReset }: GraphCanvasProps) {
   const hoveredRoute = useUiStore((s) => s.hoveredRoute);
   const selectedRoute = useUiStore((s) => s.selectedRoute);
   const positions = useUiStore((s) => s.nodePositions);
   const moveNode = useUiStore((s) => s.moveNode);
   const clearNodePositions = useUiStore((s) => s.clearNodePositions);
+  const clearRouteHighlight = useUiStore((s) => s.clearRouteHighlight);
+  const mapResetVersion = useUiStore((s) => s.mapResetVersion);
+  const clearSelection = () => {
+    onSelectNode(undefined);
+    clearRouteHighlight();
+  };
   const source = layoutSource(graph, result, matchedOnly);
   const { ref, aspect } = useLayoutAspect(source);
   const { nodes, edges } = useMemo(
@@ -68,15 +76,27 @@ export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelect
     // Let React Flow apply the new positions and handle bounds before measuring the view.
     const frame = requestAnimationFrame(() => { void flow.current?.fitView(fitViewOptions); });
     return () => cancelAnimationFrame(frame);
-  }, [aspect, source]);
+  }, [aspect, source, mapResetVersion]);
 
   return (
-    <section ref={ref} aria-label="Service graph" className="size-full">
+    <section
+      ref={ref}
+      aria-label="Service graph"
+      className="size-full"
+      onKeyDownCapture={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          clearSelection();
+        }
+      }}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onInit={(instance) => { flow.current = instance; }}
+        onPaneClick={clearSelection}
         onNodesChange={(changes) => {
           for (const change of changes) {
             if (change.type === 'position' && change.position) moveNode(change.id, change.position);
@@ -91,6 +111,12 @@ export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelect
         fitViewOptions={fitViewOptions}
       >
         <Background />
+        <Panel position="top-right" className="flex gap-2">
+          {(selectedNode !== undefined || selectedRoute !== undefined) && (
+            <Button onClick={clearSelection}>Clear selection</Button>
+          )}
+          <Button onClick={onReset}>Reset map</Button>
+        </Panel>
         <Controls showInteractive={false} />
         <MiniMap pannable zoomable ariaLabel="Service graph overview" />
       </ReactFlow>

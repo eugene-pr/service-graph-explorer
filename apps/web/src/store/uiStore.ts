@@ -15,6 +15,9 @@ interface UiState {
   moveNode: (name: string, position: { x: number; y: number }) => void;
   /** A relayout replaces every position, dragged ones included. */
   clearNodePositions: () => void;
+  /** Changes even if the Query is already the default, so Reset always refits the viewport. */
+  mapResetVersion: number;
+  resetMap: () => void;
 }
 
 export const useUiStore = create<UiState>()((set) => ({
@@ -28,4 +31,12 @@ export const useUiStore = create<UiState>()((set) => ({
   nodePositions: {},
   moveNode: (name, position) => set((s) => ({ nodePositions: { ...s.nodePositions, [name]: position } })),
   clearNodePositions: () => set({ nodePositions: {} }),
+  mapResetVersion: 0,
+  resetMap: () => set((s) => ({
+    selectedNode: undefined,
+    selectedRoute: undefined,
+    hoveredRoute: undefined,
+    nodePositions: {},
+    mapResetVersion: s.mapResetVersion + 1,
+  })),
 }));

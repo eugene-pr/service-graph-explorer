@@ -32,7 +32,13 @@ export function ExplorerPage() {
   const routes = useRoutes(query);
   const selectedNode = useUiStore((s) => s.selectedNode);
   const selectNode = useUiStore((s) => s.selectNode);
+  const resetMap = useUiStore((s) => s.resetMap);
+  const mapResetVersion = useUiStore((s) => s.mapResetVersion);
   const selected = selectedNode === undefined ? undefined : graph.data?.nodes.find((n) => n.id === selectedNode)?.data;
+  const resetExplorer = () => {
+    reset();
+    resetMap();
+  };
 
   // Placeholder data is the previous Query's result: don't present it as this Query's matches.
   const current = routes.isError || routes.isPlaceholderData ? undefined : routes.data;
@@ -74,13 +80,14 @@ export function ExplorerPage() {
             </p>
           ) : (
             <QueryPanel
+              key={mapResetVersion}
               filters={catalog.data.filters}
               query={query}
               defaultQuery={DEFAULT_QUERY}
               nodeKinds={graph.data?.meta.kinds}
               effectiveQuery={current?.meta.effectiveQuery}
               onRun={runQuery}
-              onReset={reset}
+              onReset={resetExplorer}
             />
           )}
           <Legend />
@@ -106,6 +113,7 @@ export function ExplorerPage() {
             matchedOnly={matchedOnly}
             selectedNode={selectedNode}
             onSelectNode={selectNode}
+            onReset={resetExplorer}
           />
         )
       }

@@ -561,7 +561,7 @@ describe('ExplorerPage', () => {
       expect(await findEdge('frontend->assurance-service')).toHaveAttribute('data-highlighted', 'false');
     });
 
-    it('preserves the selected Route when a hovered Route disappears and returns after Query reset', async () => {
+    it('preserves the selected Route when a hovered Route disappears, then clears it on Reset', async () => {
       const user = userEvent.setup();
       const extraNode = {
         id: 'billing-service',
@@ -601,13 +601,13 @@ describe('ExplorerPage', () => {
       expect(await findEdge('frontend->billing-service')).toHaveAttribute('data-highlighted', 'false');
 
       await user.hover(screen.getByRole('heading', { name: 'Routes' }));
-      await user.click(screen.getByRole('button', { name: /reset/i }));
+      await user.click(screen.getByRole('button', { name: /^reset$/i }));
 
       await screen.findByText('3 Routes');
-      expect(first).toHaveAttribute('aria-pressed', 'true');
+      expect(first).toHaveAttribute('aria-pressed', 'false');
       expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'true');
-      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'false');
-      expect(await findEdge('frontend->assurance-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findEdge('frontend->assurance-service')).toHaveAttribute('data-highlighted', 'true');
     });
 
     it('dims an edge outside the selected Route even when both endpoints are highlighted', async () => {
@@ -832,6 +832,55 @@ describe('ExplorerPage', () => {
   });
 
   describe('node details', () => {
+    it.each(['Reset', 'Reset map'])('%s clears the node and Route selection after showing Routes through a node', async (button) => {
+      const user = userEvent.setup();
+      server.use(http.get('*/api/routes', ({ request }) => HttpResponse.json(routesFixture(
+        new URL(request.url).searchParams.has('filters') ? [entryRoutes[0]!] : entryRoutes,
+      ))));
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('2 Routes');
+      await clickNode('auth-service');
+      await user.click(within(nodeDetails()).getByRole('button', { name: /show routes through here/i }));
+      await screen.findByText('1 Route');
+      await user.click(screen.getByRole('checkbox', { name: 'Matched only' }));
+      await user.click(screen.getByRole('button', { name: 'Route: frontend → auth-service → prod-postgresdb' }));
+
+      await user.click(screen.getByRole('button', { name: button }));
+
+      await screen.findByText('2 Routes');
+      expect(window.location.search).toBe('');
+      expect(screen.queryByRole('region', { name: /node details/i })).not.toBeInTheDocument();
+      expect(await findNode('auth-service')).toHaveAttribute('data-selected', 'false');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(screen.getByRole('button', { name: 'Route: frontend → auth-service → prod-postgresdb' })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('checkbox', { name: 'Matched only' })).not.toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'passesThrough' })).not.toBeChecked();
+    });
+
+    it.each(['Clear selection', 'Escape', 'empty canvas'])('%s clears node and Route selection without changing the Query', async (action) => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<ExplorerPage />);
+      await clickNode('auth-service');
+      await user.click(within(nodeDetails()).getByRole('button', { name: /show routes through here/i }));
+      await user.click(await screen.findByRole('button', { name: 'Route: frontend → auth-service → prod-postgresdb' }));
+      const search = window.location.search;
+      const canvas = screen.getByRole('region', { name: 'Service graph' });
+
+      if (action === 'Clear selection') await user.click(within(canvas).getByRole('button', { name: action }));
+      else if (action === 'Escape') fireEvent.keyDown(canvas, { key: 'Escape' });
+      else {
+        const pane = canvas.querySelector('.react-flow__pane');
+        if (!pane) throw new Error('No canvas pane');
+        fireEvent.click(pane);
+      }
+
+      expect(window.location.search).toBe(search);
+      expect(screen.queryByRole('region', { name: /node details/i })).not.toBeInTheDocument();
+      expect(await findNode('auth-service')).toHaveAttribute('data-selected', 'false');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(screen.getByRole('button', { name: 'Route: frontend → auth-service → prod-postgresdb' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
     it('clicking a node shows all its data in the details panel', async () => {
       renderWithQueryClient(<ExplorerPage />);
       expect(screen.queryByRole('region', { name: /node details/i })).not.toBeInTheDocument();
@@ -886,6 +935,32 @@ describe('ExplorerPage', () => {
       await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
       mouse(window, 'mouseup', by.x, by.y);
     };
+
+    it('Reset map restores dragged positions and zoom even when the Query is already the default', async () => {
+      const user = userEvent.setup();
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('2 Routes');
+      const group = await nodeGroup('auth-service');
+      await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+      const initialPosition = group.style.transform;
+      const canvas = screen.getByRole('region', { name: 'Service graph' });
+      const viewport = canvas.querySelector<HTMLElement>('.react-flow__viewport');
+      if (!viewport) throw new Error('No viewport');
+      await vi.waitFor(() => expect(viewport.style.transform).toMatch(/translate/));
+      const initialView = viewport.style.transform;
+      await dragNode('auth-service', { x: 300, y: 200 });
+      await vi.waitFor(() => expect(group.style.transform).not.toBe(initialPosition));
+      await user.click(within(canvas).getByRole('button', { name: 'Zoom In' }));
+      await vi.waitFor(() => expect(viewport.style.transform).not.toBe(initialView));
+      await user.click(screen.getByRole('checkbox', { name: 'maxLength' }));
+
+      await user.click(within(canvas).getByRole('button', { name: 'Reset map' }));
+
+      await vi.waitFor(() => expect(group.style.transform).toBe(initialPosition));
+      await vi.waitFor(() => expect(viewport.style.transform).toBe(initialView));
+      expect(window.location.search).toBe('');
+      expect(screen.getByRole('checkbox', { name: 'maxLength' })).not.toBeChecked();
+    });
 
     it('keeps a dragged node where it was dropped after a Query change, without selecting it', async () => {
       const user = userEvent.setup();
@@ -1237,7 +1312,7 @@ describe('ExplorerPage', () => {
       const list = await routeList();
       expect(await within(list).findByText('1 Route')).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: /reset/i }));
+      await user.click(screen.getByRole('button', { name: /^reset$/i }));
 
       expect(await within(list).findByText('2 Routes')).toBeInTheDocument();
       expect(screen.getByRole('checkbox', { name: 'startsAtPublic' })).not.toBeChecked();
