@@ -4,3 +4,5 @@ coverage/
 *.tsbuildinfo
 .env
 *.pdf
+test-results/
+playwright-report/

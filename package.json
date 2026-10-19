@@ -12,7 +12,8 @@
     "test": "pnpm -r test",
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
-    "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
+    "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "e2e": "pnpm build && pnpm --filter @sge/e2e e2e"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
