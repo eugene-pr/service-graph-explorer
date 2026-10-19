@@ -138,16 +138,8 @@ export function QueryPanel({ filters, query, defaultQuery, nodeKinds, effectiveQ
         <Button type="submit" variant="primary">
           Run
         </Button>
-        <Button
-          onClick={() => {
-            setDraft(defaultQuery);
-            setAdvanced(false);
-            setErrors([]);
-            onReset();
-          }}
-        >
-          Reset
-        </Button>
+        {/* Reset remounts the panel, which rebuilds its drafts from the default Query. */}
+        <Button onClick={onReset}>Reset</Button>
       </div>
       {advanced && effectiveQuery && (
         <section aria-labelledby="effective-query-heading" className="space-y-1">
