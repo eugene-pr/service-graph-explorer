@@ -918,6 +918,31 @@ describe('ExplorerPage', () => {
   });
 
   describe('Matched only relayout', () => {
+    it('recovers from an empty matched canvas when the next Query returns Routes', async () => {
+      const user = userEvent.setup();
+      window.history.replaceState(null, '', '/?filters=startsAtPublic&view=matched');
+      server.use(http.get('*/api/routes', ({ request }) => HttpResponse.json(
+        routesFixture(new URL(request.url).searchParams.get('filters') === 'startsAtPublic' ? [] : [entryRoutes[0]!]),
+      )));
+      renderWithQueryClient(<ExplorerPage />);
+      await screen.findByText('No Routes match this Query.');
+      const canvas = screen.getByRole('region', { name: 'Service graph' });
+      await vi.waitFor(() => expect(canvas.querySelector('[data-node]')).toBeNull());
+
+      await user.click(screen.getByRole('checkbox', { name: 'startsAtPublic' }));
+      await user.click(screen.getByRole('checkbox', { name: 'endsAtSink' }));
+      await user.click(screen.getByRole('button', { name: 'Run' }));
+
+      await screen.findByText('1 Route');
+      expect(screen.getByRole('checkbox', { name: 'Matched only' })).toBeChecked();
+      for (const name of entryRoutes[0]!) {
+        expect(await findNode(name)).toHaveAttribute('data-highlighted', 'true');
+        expect((await nodeGroup(name)).style.transform).not.toMatch(/NaN|Infinity/);
+      }
+      expect(canvas.querySelectorAll('[data-node]')).toHaveLength(3);
+      expect(canvas.querySelectorAll('.react-flow__edge')).toHaveLength(2);
+    });
+
     const viewport = () => {
       const element = screen.getByRole('region', { name: /service graph/i }).querySelector<HTMLElement>('.react-flow__viewport');
       if (!element) throw new Error('No viewport');

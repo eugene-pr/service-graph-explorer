@@ -1,4 +1,8 @@
 @import 'tailwindcss';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/outfit/700.css';
 
 /* Design tokens: the single source for color, font and shadow. Light theme only. */
 @theme {
@@ -24,7 +28,7 @@
 
   /* Severity: fg on its tinted bg */
   --color-severity-critical: #ec0202;
-  --color-severity-critical-bg: #fff5f5;
+  --color-severity-critical-bg: #fffefe;
   --color-severity-high: #c2410c;
   --color-severity-high-bg: #fff7ed;
   --color-severity-medium: #b45309;

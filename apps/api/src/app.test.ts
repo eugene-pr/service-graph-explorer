@@ -256,6 +256,26 @@ describe('the built web app', () => {
     expect((await app.inject({ method: 'GET', url: '/docs/' })).statusCode).toBe(200);
   });
 
+  it('runs a Route Query alongside the built web app', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/routes?filters=endsAtSink&endsAtSink.kinds=rds' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+    expect(res.json()).toMatchObject({ routes: [['web', 'db']], meta: { routeCount: 1, truncated: false } });
+  });
+
+  it('returns validation problem details alongside the built web app', async () => {
+    const res = await app.inject({
+      method: 'GET', url: '/api/routes?filters=passesThrough&passesThrough.node=absent', headers: { accept: 'text/html' },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+    expect(res.json()).toMatchObject({
+      status: 400, errors: [expect.objectContaining({ filter: 'passesThrough', param: 'node' })],
+    });
+  });
+
   it('still returns 404 problem details for an unknown API path or missing asset', async () => {
     for (const url of ['/api/nope', '/assets/missing.js']) {
       const res = await app.inject({ method: 'GET', url, headers: { accept: 'text/html' } });
