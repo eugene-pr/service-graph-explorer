@@ -1,6 +1,8 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { entryRoutes, routesFixture } from '../test/fixtures';
 import { server } from '../test/server';
 import { renderWithQueryClient } from '../test/render';
 import { ExplorerPage } from './ExplorerPage';
@@ -76,5 +78,172 @@ describe('ExplorerPage', () => {
     renderWithQueryClient(<ExplorerPage />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't load the graph/i);
+  });
+
+  describe('Query', () => {
+    /** Answers `/api/routes` with `respond(searchParams)` and records each request's search params. */
+    const recordRoutesRequests = (respond: (params: URLSearchParams) => string[][] = () => entryRoutes) => {
+      const requests: URLSearchParams[] = [];
+      server.use(
+        http.get('*/api/routes', ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          requests.push(params);
+          return HttpResponse.json(routesFixture(respond(params)));
+        }),
+      );
+      return requests;
+    };
+
+    const routeList = () => screen.findByRole('region', { name: /^routes/i });
+    const routeTexts = (list: HTMLElement) => within(list).getAllByRole('listitem').map((li) => li.textContent);
+
+    it('on open, runs the default view and lists Routes from Entries, highlighted on the canvas', async () => {
+      const requests = recordRoutesRequests();
+      renderWithQueryClient(<ExplorerPage />);
+
+      const list = await routeList();
+      expect(await within(list).findByText('2 Routes')).toBeInTheDocument();
+      expect(routeTexts(list)).toEqual(['frontend→auth-service→prod-postgresdb', 'frontend→assurance-service']);
+      expect(requests[0]?.has('filters')).toBe(false);
+      expect(await findNode('frontend')).toHaveAttribute('data-highlighted', 'true');
+    });
+
+    it('generates a toggle per Filter in the Filter Catalog, with its description', async () => {
+      renderWithQueryClient(<ExplorerPage />);
+
+      const panel = await screen.findByRole('form', { name: /query/i });
+      for (const name of ['startsAtEntry', 'startsAtPublic', 'passesThroughFixture']) {
+        expect(await within(panel).findByRole('checkbox', { name })).not.toBeChecked();
+      }
+      expect(within(panel).getByText('Starts at a publicly exposed service.')).toBeInTheDocument();
+    });
+
+    it('toggling startsAtPublic and running sends that Query, lists the matching Routes and dims the rest', async () => {
+      const user = userEvent.setup();
+      const requests = recordRoutesRequests((params) =>
+        params.get('filters') === 'startsAtPublic' ? [['frontend', 'auth-service', 'prod-postgresdb']] : entryRoutes,
+      );
+      renderWithQueryClient(<ExplorerPage />);
+
+      await user.click(await screen.findByRole('checkbox', { name: 'startsAtPublic' }));
+      await user.click(screen.getByRole('button', { name: /run/i }));
+
+      const list = await routeList();
+      expect(await within(list).findByText('1 Route')).toBeInTheDocument();
+      expect(routeTexts(list)).toEqual(['frontend→auth-service→prod-postgresdb']);
+      expect(requests.at(-1)?.get('filters')).toBe('startsAtPublic');
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'false');
+    });
+
+    it('generates param inputs from the params schema and sends params namespaced by Filter', async () => {
+      const user = userEvent.setup();
+      const requests = recordRoutesRequests();
+      renderWithQueryClient(<ExplorerPage />);
+
+      await user.click(await screen.findByRole('checkbox', { name: 'passesThroughFixture' }));
+      await user.type(screen.getByRole('textbox', { name: 'node' }), 'auth-service');
+      await user.click(screen.getByRole('button', { name: /run/i }));
+
+      await screen.findByText('2 Routes');
+      await vi.waitFor(() => expect(requests.at(-1)?.get('filters')).toBe('passesThroughFixture'));
+      expect(requests.at(-1)?.get('passesThroughFixture.node')).toBe('auth-service');
+    });
+
+    it('reset returns to the default view', async () => {
+      const user = userEvent.setup();
+      recordRoutesRequests((params) => (params.get('filters') === 'startsAtPublic' ? [['frontend', 'assurance-service']] : entryRoutes));
+      renderWithQueryClient(<ExplorerPage />);
+
+      await user.click(await screen.findByRole('checkbox', { name: 'startsAtPublic' }));
+      await user.click(screen.getByRole('button', { name: /run/i }));
+      const list = await routeList();
+      expect(await within(list).findByText('1 Route')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /reset/i }));
+
+      expect(await within(list).findByText('2 Routes')).toBeInTheDocument();
+      expect(screen.getByRole('checkbox', { name: 'startsAtPublic' })).not.toBeChecked();
+    });
+
+    it('shows the count and a notice when the results were truncated', async () => {
+      server.use(http.get('*/api/routes', () => HttpResponse.json(routesFixture(entryRoutes, { truncated: true, limit: 2 }))));
+      renderWithQueryClient(<ExplorerPage />);
+
+      const list = await routeList();
+      expect(await within(list).findByText('2 Routes')).toBeInTheDocument();
+      expect(within(list).getByRole('status')).toHaveTextContent(/more routes match/i);
+    });
+
+    it('Run retries a failed Query even when nothing changed', async () => {
+      const user = userEvent.setup();
+      let failing = true;
+      server.use(
+        http.get('*/api/routes', () =>
+          failing
+            ? HttpResponse.json({ type: 'about:blank', title: 'Internal Server Error', status: 500 }, { status: 500 })
+            : HttpResponse.json(routesFixture(entryRoutes)),
+        ),
+      );
+      renderWithQueryClient(<ExplorerPage />);
+      const list = await routeList();
+      await within(list).findByRole('alert');
+
+      failing = false;
+      await user.click(screen.getByRole('button', { name: /run/i }));
+
+      expect(await within(list).findByText('2 Routes')).toBeInTheDocument();
+      expect(within(list).queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('while a new Query runs, marks the previous Routes as updating and drops their highlight', async () => {
+      const user = userEvent.setup();
+      let release = () => {};
+      const released = new Promise<void>((resolve) => (release = resolve));
+      server.use(
+        http.get('*/api/routes', async ({ request }) => {
+          if (new URL(request.url).searchParams.get('filters') !== 'startsAtPublic') return HttpResponse.json(routesFixture(entryRoutes));
+          await released;
+          return HttpResponse.json(routesFixture([['frontend', 'assurance-service']]));
+        }),
+      );
+      renderWithQueryClient(<ExplorerPage />);
+      const list = await routeList();
+      await within(list).findByText('2 Routes');
+
+      await user.click(screen.getByRole('checkbox', { name: 'startsAtPublic' }));
+      await user.click(screen.getByRole('button', { name: /run/i }));
+
+      expect(await within(list).findByRole('status')).toHaveTextContent(/updating/i);
+      expect(within(list).getByRole('list')).toHaveAttribute('aria-busy', 'true');
+      expect(await findNode('frontend')).not.toHaveAttribute('data-highlighted');
+
+      release();
+      expect(await within(list).findByText('1 Route')).toBeInTheDocument();
+      expect(within(list).queryByRole('status')).not.toBeInTheDocument();
+      expect(await findNode('frontend')).toHaveAttribute('data-highlighted', 'true');
+    });
+
+    it('shows the problems when the API rejects the Query', async () => {
+      server.use(
+        http.get('*/api/routes', () =>
+          HttpResponse.json(
+            {
+              type: 'about:blank',
+              title: 'Bad Request',
+              status: 400,
+              detail: 'The Query is invalid.',
+              errors: [{ filter: 'passesThroughFixture', param: 'node', message: 'Too small' }],
+            },
+            { status: 400, headers: { 'Content-Type': 'application/problem+json' } },
+          ),
+        ),
+      );
+      renderWithQueryClient(<ExplorerPage />);
+
+      const alert = await within(await routeList()).findByRole('alert');
+      expect(alert).toHaveTextContent('The Query is invalid.');
+      expect(alert).toHaveTextContent('passesThroughFixture.node: Too small');
+    });
   });
 });

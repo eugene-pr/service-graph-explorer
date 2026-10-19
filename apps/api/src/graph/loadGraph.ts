@@ -1,12 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { RawGraph, Severity, type GraphEdge, type GraphNode } from '@sge/domain';
 import { z } from 'zod';
-
-export interface LoadedGraph {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  warnings: string[];
-}
+import { createGraph, type Graph } from './graph.js';
 
 /** The graph file can't be served: startup must fail. */
 export class GraphLoadError extends Error {
@@ -16,7 +11,7 @@ export class GraphLoadError extends Error {
 /** The bundled data file, used when `GRAPH_FILE` is not set. Same depth from `src/` and `dist/`. */
 export const DEFAULT_GRAPH_FILE = new URL('../../../../data/train-ticket-be.json', import.meta.url);
 
-export async function loadGraphFile(file: string | URL): Promise<LoadedGraph> {
+export async function loadGraphFile(file: string | URL): Promise<Graph> {
   let text: string;
   try {
     text = await readFile(file, 'utf8');
@@ -32,8 +27,8 @@ export async function loadGraphFile(file: string | URL): Promise<LoadedGraph> {
   return loadGraph(json);
 }
 
-/** Turns raw graph JSON into a normalized graph plus data warnings. */
-export function loadGraph(input: unknown): LoadedGraph {
+/** Turns raw graph JSON into a normalized Graph plus data warnings. */
+export function loadGraph(input: unknown): Graph {
   const parsed = RawGraph.safeParse(input);
   if (!parsed.success) throw new GraphLoadError(`Invalid graph file:\n${z.prettifyError(parsed.error)}`);
   const raw = parsed.data;
@@ -82,5 +77,5 @@ export function loadGraph(input: unknown): LoadedGraph {
     }
   }
 
-  return { nodes, edges, warnings };
+  return createGraph(nodes, edges, warnings);
 }

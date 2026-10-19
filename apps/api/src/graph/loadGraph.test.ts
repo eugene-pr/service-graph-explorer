@@ -87,6 +87,48 @@ describe('loadGraph', () => {
   });
 });
 
+describe('the loaded Graph', () => {
+  const graph = loadGraph({
+    nodes: [service('a'), service('b'), { name: 'db', kind: 'rds' }, service('c'), { name: 'q', kind: 'sqs' }],
+    edges: [
+      { from: 'a', to: ['c', 'b'] },
+      { from: 'b', to: 'db' },
+      { from: 'c', to: ['db', 'q', 'undeclared'] },
+    ],
+  });
+
+  it('looks nodes up by name, including Inferred Nodes', () => {
+    expect(graph.node('db')).toMatchObject({ name: 'db', kind: 'rds' });
+    expect(graph.node('undeclared')).toMatchObject({ name: 'undeclared', inferred: true });
+    expect(graph.node('nope')).toBeUndefined();
+  });
+
+  it('gives forward and reverse adjacency in source-data order', () => {
+    expect(graph.successors('a')).toEqual(['c', 'b']);
+    expect(graph.successors('c')).toEqual(['db', 'q', 'undeclared']);
+    expect(graph.successors('db')).toEqual([]);
+    expect(graph.predecessors('db')).toEqual(['b', 'c']);
+    expect(graph.predecessors('a')).toEqual([]);
+  });
+
+  it('looks edges up by their endpoints', () => {
+    expect(graph.edge('a', 'c')).toEqual({ id: 'a->c', source: 'a', target: 'c' });
+    expect(graph.edge('c', 'a')).toBeUndefined();
+  });
+
+  it('lists the kinds present, in source-data order', () => {
+    expect(graph.kinds).toEqual(['service', 'rds', 'sqs']);
+  });
+
+  it('gives the `GET /api/graph` response shape', () => {
+    const response = graph.toResponse();
+    expect(response.nodes.map((n) => n.id)).toEqual(['a', 'b', 'db', 'c', 'q', 'undeclared']);
+    expect(response.nodes[2]).toEqual({ id: 'db', data: graph.node('db') });
+    expect(response.edges).toHaveLength(6);
+    expect(response.meta.warnings).toEqual([expect.stringContaining('"undeclared"')]);
+  });
+});
+
 describe('loadGraphFile', () => {
   it('loads the bundled data with exactly one Inferred Node, `assurance-service`', async () => {
     const graph = await loadGraphFile(DEFAULT_GRAPH_FILE);

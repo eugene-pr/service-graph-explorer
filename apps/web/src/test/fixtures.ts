@@ -1,4 +1,4 @@
-import type { GraphResponse } from '@sge/domain';
+import type { FiltersResponse, GraphResponse, RoutesResponse } from '@sge/domain';
 
 /** A small graph covering every node visual: public, vulnerable, Sink, Inferred Node. */
 export const graphFixture: GraphResponse = {
@@ -39,3 +39,44 @@ export const graphFixture: GraphResponse = {
     warnings: ['Node "assurance-service" is referenced by an edge but not defined; added as an Inferred Node of kind "service".'],
   },
 };
+
+export const filtersFixture: FiltersResponse = {
+  filters: [
+    {
+      name: 'startsAtEntry',
+      description: 'Starts at an Entry.',
+      position: 'start',
+      params: { type: 'object', properties: {}, additionalProperties: false },
+    },
+    {
+      name: 'startsAtPublic',
+      description: 'Starts at a publicly exposed service.',
+      position: 'start',
+      params: { type: 'object', properties: {}, additionalProperties: false },
+    },
+    {
+      name: 'passesThroughFixture',
+      description: 'Passes through the named node.',
+      position: 'any',
+      params: { type: 'object', properties: { node: { type: 'string' } }, required: ['node'], additionalProperties: false },
+    },
+  ],
+};
+
+/** A `GET /api/routes` response for these Routes over `graphFixture`. */
+export function routesFixture(routes: string[][], { truncated = false, limit = 100 } = {}): RoutesResponse {
+  const names = new Set(routes.flat());
+  const edgeIds = new Set(routes.flatMap((route) => route.slice(1).map((target, i) => `${route[i]}->${target}`)));
+  return {
+    nodes: graphFixture.nodes.filter((n) => names.has(n.id)),
+    edges: graphFixture.edges.filter((e) => edgeIds.has(e.id)),
+    routes,
+    meta: { routeCount: routes.length, truncated, limit, effectiveQuery: { and: [] }, warnings: graphFixture.meta.warnings },
+  };
+}
+
+/** Routes from the Entry `frontend`: what the default view returns. */
+export const entryRoutes = [
+  ['frontend', 'auth-service', 'prod-postgresdb'],
+  ['frontend', 'assurance-service'],
+];
