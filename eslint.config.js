@@ -10,7 +10,7 @@ const layers = ['atoms', 'molecules', 'organisms', 'templates', 'pages'];
 const webSrc = 'apps/web/src';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/coverage/**'] },
+  { ignores: ['**/dist/**', '**/coverage/**', '.claude/**', '.playwright-mcp/**'] },
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {
