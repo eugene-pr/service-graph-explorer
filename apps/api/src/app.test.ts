@@ -33,11 +33,16 @@ describe('GET /api/filters', () => {
 
     expect(res.statusCode).toBe(200);
     const { filters } = FiltersResponse.parse(res.json());
-    expect(filters.map((f) => f.name)).toEqual(['startsAtEntry', 'startsAtPublic', 'visits', 'endsAtKind', 'maxHops']);
+    expect(filters.map((f) => f.name)).toEqual(['startsAtEntry', 'startsAtPublic', 'endsAtSink', 'visits', 'endsAtKind', 'maxHops']);
     expect(filters.find((f) => f.name === 'visits')).toMatchObject({
       description: 'Passes through the named node.',
       position: 'any',
       params: { type: 'object', properties: { node: { type: 'string' } }, required: ['node'] },
+    });
+    expect(filters.find((f) => f.name === 'endsAtSink')?.params.properties?.kinds).toMatchObject({
+      type: 'array',
+      items: { type: 'string' },
+      'x-options': 'nodeKinds',
     });
   });
 });
@@ -102,6 +107,8 @@ describe('GET /api/routes', () => {
     ['a missing required param', '?filters=visits', [{ filter: 'visits', param: 'node' }]],
     ['an unknown param', '?filters=visits&visits.node=db&visits.bogus=1', [{ filter: 'visits', param: 'bogus' }]],
     ['a param for a Filter not in `filters`', '?visits.node=db', [{ filter: 'visits', param: 'node' }]],
+    ['an empty sink kind in a list', '?filters=endsAtSink&endsAtSink.kinds=rds,,sqs', [{ filter: 'endsAtSink', param: 'kinds' }]],
+    ['a sink kind not in the graph', '?filters=endsAtSink&endsAtSink.kinds=rds,mongo', [{ filter: 'endsAtSink', param: 'kinds' }]],
     ['a repeated Filter', '?filters=startsAtPublic,startsAtPublic', [{ filter: 'startsAtPublic' }]],
     ['a limit over the maximum', '?limit=1001', [{ param: 'limit' }]],
     ['a limit that is not a number', '?limit=lots', [{ param: 'limit' }]],
@@ -169,7 +176,7 @@ describe('GET /api/graph', () => {
         { id: 'web->db', source: 'web', target: 'db' },
         { id: 'web->missing', source: 'web', target: 'missing' },
       ],
-      meta: { warnings: [expect.stringContaining('"missing"')] },
+      meta: { warnings: [expect.stringContaining('"missing"')], kinds: ['service', 'rds'], sinkKinds: ['rds'] },
     });
   });
 });

@@ -12,12 +12,14 @@ interface QueryPanelProps {
   query: FlatQuery;
   /** What reset returns to. */
   defaultQuery: FlatQuery;
+  /** The node kinds in the graph, for params whose values are node kinds; undefined until the graph loads. */
+  nodeKinds: readonly string[] | undefined;
   onRun: (query: FlatQuery) => void;
   onReset: () => void;
 }
 
 /** Edits a draft Query; nothing runs until Run. */
-export function QueryPanel({ filters, query, defaultQuery, onRun, onReset }: QueryPanelProps) {
+export function QueryPanel({ filters, query, defaultQuery, nodeKinds, onRun, onReset }: QueryPanelProps) {
   const [draft, setDraft] = useState(query);
   const active = new Set(draft.filters);
 
@@ -56,6 +58,7 @@ export function QueryPanel({ filters, query, defaultQuery, onRun, onReset }: Que
                     required={params.required?.includes(param) ?? false}
                     value={draft.params[name]?.[param] ?? ''}
                     onChange={(value) => setParam(name, param, value)}
+                    options={schema['x-options'] === 'nodeKinds' ? nodeKinds : undefined}
                   />
                 ))}
               </div>

@@ -50,6 +50,7 @@ export function ExplorerPage() {
               filters={catalog.data.filters}
               query={query}
               defaultQuery={DEFAULT_QUERY}
+              nodeKinds={graph.data?.meta.kinds}
               onRun={(next) => {
                 // Same Query: same cache key, so setting it again wouldn't refetch. Run it again explicitly.
                 if (toSearchParams(next).toString() === toSearchParams(query).toString()) {

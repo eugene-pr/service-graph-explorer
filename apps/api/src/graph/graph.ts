@@ -9,6 +9,8 @@ export interface Graph {
   readonly warnings: readonly string[];
   /** Node kinds present, in order of first appearance. */
   readonly kinds: readonly string[];
+  /** The default Sink kinds: every kind present except `service`. The one home of the Sink rule. */
+  readonly sinkKinds: readonly string[];
   node(name: string): GraphNode | undefined;
   edge(source: string, target: string): GraphEdge | undefined;
   /** Targets of a node's outgoing edges, in source-data order. */
@@ -32,10 +34,11 @@ export function createGraph(nodes: readonly GraphNode[], edges: readonly GraphEd
     edgesByEnds.set(edge.source, out);
   }
   const kinds = [...new Set(nodes.map((node) => node.kind))];
+  const sinkKinds = kinds.filter((kind) => kind !== 'service');
   const response: GraphResponse = {
     nodes: nodes.map((node) => ({ id: node.name, data: node })),
     edges: [...edges],
-    meta: { warnings: [...warnings] },
+    meta: { warnings: [...warnings], kinds, sinkKinds },
   };
 
   return {
@@ -43,6 +46,7 @@ export function createGraph(nodes: readonly GraphNode[], edges: readonly GraphEd
     edges,
     warnings,
     kinds,
+    sinkKinds,
     node: (name) => byName.get(name),
     edge: (source, target) => edgesByEnds.get(source)?.get(target),
     successors: (name) => forward.get(name) ?? [],

@@ -4,19 +4,20 @@ import { Badge } from '../atoms/Badge';
 import { NodeShape } from '../molecules/NodeShape';
 import { PublicBadge } from '../molecules/PublicBadge';
 import { SeverityBadge } from '../molecules/SeverityBadge';
-import { highestSeverity, isSink } from '../lib/graph';
+import { highestSeverity } from '../lib/graph';
 
 export type ServiceFlowNode = Node<
   {
     node: GraphNode;
+    /** Its kind is one of the graph's default Sink kinds, as served by the API. */
+    sink: boolean;
     /** On a matched Route; undefined when no Query result is shown. */
     highlighted?: boolean | undefined;
   },
   'service'
 >;
 
-export function ServiceNode({ data: { node, highlighted } }: NodeProps<ServiceFlowNode>) {
-  const sink = isSink(node);
+export function ServiceNode({ data: { node, sink, highlighted } }: NodeProps<ServiceFlowNode>) {
   const severity = highestSeverity(node);
   const vulnCount = node.vulnerabilities.length;
 

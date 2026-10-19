@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { entryRoutes, routesFixture } from '../test/fixtures';
+import { entryRoutes, graphFixture, routesFixture } from '../test/fixtures';
 import { server } from '../test/server';
 import { renderWithQueryClient } from '../test/render';
 import { ExplorerPage } from './ExplorerPage';
@@ -35,6 +35,13 @@ describe('ExplorerPage', () => {
     expect(within(inferred).getByText('inferred')).toBeInTheDocument();
   });
 
+  it('draws as Sinks the nodes whose kind the API serves as a Sink kind', async () => {
+    server.use(http.get('*/api/graph', () => HttpResponse.json({ ...graphFixture, meta: { ...graphFixture.meta, sinkKinds: [] } })));
+    renderWithQueryClient(<ExplorerPage />);
+
+    expect(await findNode('prod-postgresdb')).toHaveAttribute('data-sink', 'false');
+  });
+
   it('shows the load warnings in a banner', async () => {
     renderWithQueryClient(<ExplorerPage />);
 
@@ -44,7 +51,7 @@ describe('ExplorerPage', () => {
 
   it('shows no warnings banner when the data has none', async () => {
     server.use(
-      http.get('*/api/graph', () => HttpResponse.json({ nodes: [], edges: [], meta: { warnings: [] } })),
+      http.get('*/api/graph', () => HttpResponse.json({ nodes: [], edges: [], meta: { warnings: [], kinds: [], sinkKinds: [] } })),
     );
     renderWithQueryClient(<ExplorerPage />);
 
@@ -148,6 +155,24 @@ describe('ExplorerPage', () => {
       await screen.findByText('2 Routes');
       await vi.waitFor(() => expect(requests.at(-1)?.get('filters')).toBe('passesThroughFixture'));
       expect(requests.at(-1)?.get('passesThroughFixture.node')).toBe('auth-service');
+    });
+
+    it('lists the graph\'s node kinds for endsAtSink, sending the checked ones, or none for the default', async () => {
+      const user = userEvent.setup();
+      const requests = recordRoutesRequests();
+      renderWithQueryClient(<ExplorerPage />);
+
+      await user.click(await screen.findByRole('checkbox', { name: 'endsAtSink' }));
+      const kinds = await screen.findByRole('group', { name: /kinds/i });
+      expect(within(kinds).getAllByRole('checkbox').map((box) => box.closest('label')?.textContent)).toEqual(['service', 'rds']);
+
+      await user.click(screen.getByRole('button', { name: /run/i }));
+      await vi.waitFor(() => expect(requests.at(-1)?.get('filters')).toBe('endsAtSink'));
+      expect(requests.at(-1)?.has('endsAtSink.kinds')).toBe(false);
+
+      await user.click(within(kinds).getByRole('checkbox', { name: 'rds' }));
+      await user.click(screen.getByRole('button', { name: /run/i }));
+      await vi.waitFor(() => expect(requests.at(-1)?.get('endsAtSink.kinds')).toBe('rds'));
     });
 
     it('reset returns to the default view', async () => {

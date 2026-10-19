@@ -26,6 +26,7 @@ export function GraphCanvas({ graph, highlight }: GraphCanvasProps) {
       graph.nodes.map((n) => n.id),
       graph.edges,
     );
+    const sinkKinds = new Set(graph.meta.sinkKinds);
     const nodes: ServiceFlowNode[] = graph.nodes.map(({ id, data }) => ({
       id,
       type: 'service',
@@ -33,7 +34,7 @@ export function GraphCanvas({ graph, highlight }: GraphCanvasProps) {
       position: positions.get(id) ?? { x: 0, y: 0 },
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
-      data: { node: data },
+      data: { node: data, sink: sinkKinds.has(data.kind) },
     }));
     return { nodes, edges: graph.edges };
   }, [graph]);

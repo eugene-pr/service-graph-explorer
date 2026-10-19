@@ -31,6 +31,17 @@ export const filterCatalog = {
     position: 'start',
     params: z.strictObject({}),
   },
+  endsAtSink: {
+    description: 'Ends at a Sink: a node whose kind counts as a Sink.',
+    position: 'end',
+    params: z.strictObject({
+      kinds: z
+        .array(z.string().min(1))
+        .min(1)
+        .optional()
+        .meta({ description: 'Node kinds that count as Sinks. Default: every kind except service.', 'x-options': 'nodeKinds' }),
+    }),
+  },
 } satisfies FilterCatalog;
 
 export type FilterName = keyof typeof filterCatalog;
@@ -41,6 +52,8 @@ export const ParamJsonSchema = z.looseObject({
   description: z.string().optional(),
   enum: z.array(z.string()).optional(),
   items: z.looseObject({ type: z.string().optional(), enum: z.array(z.string()).optional() }).optional(),
+  /** Where the allowed values come from when they depend on the graph: `nodeKinds` is the node kinds present. */
+  'x-options': z.enum(['nodeKinds']).optional(),
 });
 export type ParamJsonSchema = z.infer<typeof ParamJsonSchema>;
 

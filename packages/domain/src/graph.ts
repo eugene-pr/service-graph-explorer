@@ -63,6 +63,12 @@ export type GraphEdge = z.infer<typeof GraphEdge>;
 export const GraphResponse = z.object({
   nodes: z.array(z.object({ id: z.string(), data: GraphNode })),
   edges: z.array(GraphEdge),
-  meta: z.object({ warnings: z.array(z.string()) }),
+  meta: z.object({
+    warnings: z.array(z.string()),
+    /** Node kinds present, in order of first appearance. */
+    kinds: z.array(z.string()),
+    /** The kinds that count as Sinks when a Query doesn't choose its own. */
+    sinkKinds: z.array(z.string()),
+  }),
 });
 export type GraphResponse = z.infer<typeof GraphResponse>;

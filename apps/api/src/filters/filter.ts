@@ -15,11 +15,16 @@ export interface RouteCheck {
 }
 type CheckFor<P extends FilterPosition> = P extends 'route' ? RouteCheck : NodeCheck;
 
-/** Builds a Filter's check from its parsed params, once per Query. */
+/** Params that fit their schema but not the loaded graph, e.g. a kind that isn't present. */
+export interface GraphMismatch {
+  mismatches: { param: string; message: string }[];
+}
+
+/** Builds a Filter's check from its parsed params, once per Query, after checking them against the graph. */
 export type FilterImplementation<D extends FilterDefinition> = (
   params: z.output<D['params']>,
   graph: Graph,
-) => CheckFor<D['position']>;
+) => CheckFor<D['position']> | GraphMismatch;
 
 /** One check per catalog entry: a missing check, or a check with no metadata, fails to compile. */
 export type FilterImplementations<C extends Record<keyof C, FilterDefinition>> = { [K in keyof C]: FilterImplementation<C[K]> };
@@ -49,7 +54,7 @@ export function createFilters<C extends Record<keyof C, FilterDefinition>>(catal
 function createFilter<P extends z.ZodObject, Pos extends FilterPosition>(
   name: string,
   definition: { description: string; position: Pos; params: P },
-  implementation: (params: z.output<P>, graph: Graph) => CheckFor<Pos>,
+  implementation: (params: z.output<P>, graph: Graph) => CheckFor<Pos> | GraphMismatch,
 ): Filter {
   return {
     name,
@@ -57,12 +62,19 @@ function createFilter<P extends z.ZodObject, Pos extends FilterPosition>(
     paramsJsonSchema: FilterInfo.shape.params.parse(z.toJSONSchema(definition.params, { io: 'input' })),
     prepare(params, graph) {
       const parsed = definition.params.safeParse(params ?? {});
-      if (parsed.success) return { ok: true, check: implementation(parsed.data, graph) };
+      if (parsed.success) {
+        const built = implementation(parsed.data, graph);
+        if ('mismatches' in built) return { ok: false, errors: built.mismatches.map((mismatch) => ({ filter: name, ...mismatch })) };
+        return { ok: true, check: built };
+      }
       return {
         ok: false,
         errors: parsed.error.issues.flatMap((issue) => {
-          const keys = issue.code === 'unrecognized_keys' ? issue.keys : [issue.path.join('.')];
-          return keys.map((param) => ({ filter: name, ...(param && { param }), message: issue.message }));
+          // Name the param itself; a position inside it (e.g. a list item) goes in the message.
+          const [key, ...inner] = issue.path;
+          const keys = issue.code === 'unrecognized_keys' ? issue.keys : [key === undefined ? '' : String(key)];
+          const message = inner.length > 0 ? `${issue.message} (at ${inner.join('.')})` : issue.message;
+          return keys.map((param) => ({ filter: name, ...(param && { param }), message }));
         }),
       };
     },

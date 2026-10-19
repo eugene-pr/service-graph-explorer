@@ -37,6 +37,8 @@ export const graphFixture: GraphResponse = {
   ],
   meta: {
     warnings: ['Node "assurance-service" is referenced by an edge but not defined; added as an Inferred Node of kind "service".'],
+    kinds: ['service', 'rds'],
+    sinkKinds: ['rds'],
   },
 };
 
@@ -53,6 +55,18 @@ export const filtersFixture: FiltersResponse = {
       description: 'Starts at a publicly exposed service.',
       position: 'start',
       params: { type: 'object', properties: {}, additionalProperties: false },
+    },
+    {
+      name: 'endsAtSink',
+      description: 'Ends at a Sink.',
+      position: 'end',
+      params: {
+        type: 'object',
+        properties: {
+          kinds: { type: 'array', items: { type: 'string' }, description: 'Node kinds that count as Sinks.', 'x-options': 'nodeKinds' },
+        },
+        additionalProperties: false,
+      },
     },
     {
       name: 'passesThroughFixture',

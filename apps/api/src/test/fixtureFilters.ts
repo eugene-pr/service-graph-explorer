@@ -1,6 +1,6 @@
 import { filterCatalog, type FilterCatalog } from '@sge/domain';
 import { z } from 'zod';
-import { createFilters } from '../filters/filter.js';
+import { createFilters, type FilterImplementations } from '../filters/filter.js';
 import { implementations } from '../filters/index.js';
 
 /** The real Filters plus fixture ones, registered without touching the engine or HTTP layer. */
@@ -23,9 +23,11 @@ export const fixtureCatalog = {
   },
 } satisfies FilterCatalog;
 
-export const fixtureFilters = createFilters(fixtureCatalog, {
+export const fixtureImplementations: FilterImplementations<typeof fixtureCatalog> = {
   ...implementations,
   visits: ({ node }) => ({ node: (candidate) => candidate.name === node }),
   endsAtKind: ({ kinds }) => ({ node: (candidate) => kinds.includes(candidate.kind) }),
   maxHops: ({ hops }) => ({ route: (route) => route.length - 1 <= hops }),
-});
+};
+
+export const fixtureFilters = createFilters(fixtureCatalog, fixtureImplementations);

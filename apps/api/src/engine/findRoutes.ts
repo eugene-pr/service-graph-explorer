@@ -1,4 +1,4 @@
-import type { FilterLeaf, FilterName, ProblemError, Query, RoutesResponse } from '@sge/domain';
+import type { FilterLeaf, FilterName, FilterPosition, ProblemError, Query, RoutesResponse } from '@sge/domain';
 import { filters as catalogFilters } from '../filters/index.js';
 import type { Filter, Filters, NodeCheck, Route, RouteCheck } from '../filters/filter.js';
 import type { Graph } from '../graph/graph.js';
@@ -24,18 +24,25 @@ const DEFAULT_START = { filter: 'startsAtEntry' satisfies FilterName };
  * Throws a `QueryError` for an unknown Filter or bad params.
  */
 export function findRoutes(graph: Graph, query: Query, { limit, filters = catalogFilters }: FindRoutesOptions): RoutesResponse {
-  const isStartLeaf = (member: Query) => 'filter' in member && filters.get(member.filter)?.position === 'start';
-  const effectiveQuery = withDefaultStart(query, isStartLeaf);
+  const isLeafAt = (position: FilterPosition) => (member: Query) =>
+    'filter' in member && filters.get(member.filter)?.position === position;
+  const effectiveQuery = withDefaultStart(query, isLeafAt('start'));
 
   const errors: ProblemError[] = [];
   const matches = compile(effectiveQuery, graph, filters, errors);
-  const startChecks = topLevelMembers(effectiveQuery)
-    .filter(isStartLeaf)
-    .map((leaf) => compile(leaf, graph, filters, errors));
   if (errors.length > 0) throw new QueryError(errors);
+  // Start candidates and pruning read only direct members of the top-level `and`, never `or`/`not` members.
+  const checksAt = (position: FilterPosition) =>
+    topLevelMembers(effectiveQuery)
+      .filter(isLeafAt(position))
+      .map((leaf) => compile(leaf, graph, filters, errors));
+  const startChecks = checksAt('start');
+  const endChecks = checksAt('end');
 
+  // A one-node Route puts its node first and last, so start and end checks can test a single node.
   const starts = graph.nodes.filter((node) => startChecks.every((check) => check([node.name])));
-  const routes = search(graph, starts.map((node) => node.name), matches, limit + 1);
+  const reachable = endChecks.length > 0 ? canReachEnd(graph, (name) => endChecks.every((check) => check([name]))) : undefined;
+  const routes = search(graph, starts.map((node) => node.name), matches, limit + 1, reachable);
   const truncated = routes.length > limit;
   if (truncated) routes.pop();
 
@@ -97,11 +104,33 @@ function toRouteMatcher(filter: Filter, check: NodeCheck | RouteCheck, graph: Gr
   }
 }
 
-/** DFS over simple paths, in source-data order, until `max` matching Routes are found. */
-function search(graph: Graph, starts: readonly string[], matches: RouteMatcher, max: number): Route[] {
+/**
+ * Pruning: the nodes with a path to a Route end (no outgoing edges) that passes `isEnd`, found by reverse BFS.
+ * A Route through any other node can't match, so skipping them never changes the results.
+ */
+function canReachEnd(graph: Graph, isEnd: (name: string) => boolean): ReadonlySet<string> {
+  const ends = graph.nodes.filter((node) => graph.successors(node.name).length === 0 && isEnd(node.name)).map((node) => node.name);
+  const reached = new Set(ends);
+  const queue = [...ends];
+  for (let name = queue.shift(); name !== undefined; name = queue.shift()) {
+    for (const source of graph.predecessors(name)) {
+      if (reached.has(source)) continue;
+      reached.add(source);
+      queue.push(source);
+    }
+  }
+  return reached;
+}
+
+/**
+ * DFS over simple paths, in source-data order, until `max` matching Routes are found.
+ * With `reachable`, nodes outside it are skipped.
+ */
+function search(graph: Graph, starts: readonly string[], matches: RouteMatcher, max: number, reachable?: ReadonlySet<string>): Route[] {
   const routes: Route[] = [];
   const path: string[] = [];
   const onPath = new Set<string>();
+  const skip = (name: string) => onPath.has(name) || (reachable !== undefined && !reachable.has(name));
 
   const visit = (name: string) => {
     path.push(name);
@@ -112,7 +141,7 @@ function search(graph: Graph, starts: readonly string[], matches: RouteMatcher, 
     } else {
       for (const target of next) {
         if (routes.length >= max) break;
-        if (!onPath.has(target)) visit(target);
+        if (!skip(target)) visit(target);
       }
     }
     onPath.delete(name);
@@ -120,7 +149,7 @@ function search(graph: Graph, starts: readonly string[], matches: RouteMatcher, 
   };
   for (const start of starts) {
     if (routes.length >= max) break;
-    visit(start);
+    if (!skip(start)) visit(start);
   }
   return routes;
 }
