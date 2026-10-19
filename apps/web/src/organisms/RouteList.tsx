@@ -1,4 +1,5 @@
 import type { RoutesResponse } from '@sge/domain';
+import { useEffect } from 'react';
 import { Spinner } from '../atoms/Spinner';
 import { RouteChip } from '../molecules/RouteChip';
 import { routeKey } from '../lib/toFlowGraph';
@@ -18,6 +19,16 @@ export function RouteList({ result, isPending, isUpdating = false, error }: Rout
   const selectRoute = useUiStore((s) => s.selectRoute);
   const clearRouteHighlight = useUiStore((s) => s.clearRouteHighlight);
   const selectedIndex = result?.routes.findIndex((route) => routeKey(route) === selectedRoute) ?? -1;
+
+  useEffect(() => {
+    // Removing a row does not fire mouseleave. Read the hover without subscribing the list to previews.
+    const hoveredRoute = useUiStore.getState().hoveredRoute;
+    const rowIsVisible = !error && !isPending && result?.routes.some((route) => routeKey(route) === hoveredRoute);
+    if (hoveredRoute && !rowIsVisible) hoverRoute(undefined);
+  }, [result, error, isPending, hoverRoute]);
+
+  useEffect(() => () => hoverRoute(undefined), [hoverRoute]);
+
   return (
     <section aria-labelledby="route-list-title" className="space-y-3 text-sm">
       <h2 id="route-list-title" className="font-semibold text-slate-900">

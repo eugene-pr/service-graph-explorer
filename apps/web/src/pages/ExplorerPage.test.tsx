@@ -37,7 +37,43 @@ const detailRows = (details: HTMLElement) =>
 
 describe('ExplorerPage', () => {
   describe('Route highlights', () => {
-    it('restores the selected Route when a hovered Route disappears after a Query update', async () => {
+    it('preserves selection after an error removes the hovered row and a retry restores it', async () => {
+      const user = userEvent.setup();
+      let failing = false;
+      server.use(http.get('*/api/routes', () => failing
+        ? HttpResponse.json({ type: 'about:blank', title: 'Internal Server Error', status: 500 }, { status: 500 })
+        : HttpResponse.json(routesFixture(entryRoutes)),
+      ));
+      renderWithQueryClient(<ExplorerPage />);
+      const [first, second] = await routeButtons();
+      if (!first || !second) throw new Error('Expected two Routes');
+      await user.click(first);
+
+      const run = screen.getByRole('button', { name: /run/i });
+      for (let i = 0; i < 30 && document.activeElement !== run; i++) await user.tab();
+      expect(run).toHaveFocus();
+      await user.hover(second);
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'false');
+
+      failing = true;
+      await user.keyboard('{Enter}');
+      const list = screen.getByRole('region', { name: /^routes/i });
+      await within(list).findByRole('alert');
+      expect(second).not.toBeInTheDocument();
+      await user.hover(within(list).getByRole('heading', { name: 'Routes' }));
+
+      failing = false;
+      await user.click(run);
+
+      await within(list).findByText('2 Routes');
+      expect(within(list).getByRole('button', { name: 'Route: frontend → auth-service → prod-postgresdb' }))
+        .toHaveAttribute('aria-pressed', 'true');
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findEdge('frontend->assurance-service')).toHaveAttribute('data-highlighted', 'false');
+    });
+
+    it('preserves the selected Route when a hovered Route disappears and returns after Query reset', async () => {
       const user = userEvent.setup();
       const extraNode = {
         id: 'billing-service',
@@ -75,6 +111,15 @@ describe('ExplorerPage', () => {
       expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'true');
       expect(await findNode('billing-service')).toHaveAttribute('data-highlighted', 'false');
       expect(await findEdge('frontend->billing-service')).toHaveAttribute('data-highlighted', 'false');
+
+      await user.hover(screen.getByRole('heading', { name: 'Routes' }));
+      await user.click(screen.getByRole('button', { name: /reset/i }));
+
+      await screen.findByText('3 Routes');
+      expect(first).toHaveAttribute('aria-pressed', 'true');
+      expect(await findNode('auth-service')).toHaveAttribute('data-highlighted', 'true');
+      expect(await findNode('assurance-service')).toHaveAttribute('data-highlighted', 'false');
+      expect(await findEdge('frontend->assurance-service')).toHaveAttribute('data-highlighted', 'false');
     });
 
     it('dims an edge outside the selected Route even when both endpoints are highlighted', async () => {
