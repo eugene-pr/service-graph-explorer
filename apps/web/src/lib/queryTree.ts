@@ -1,4 +1,4 @@
-import { Query, type AndQuery, type FilterLeaf, type FlatQuery, type OrQuery, type RoutesQueryRequest } from '@sge/domain';
+import { Query, type AndQuery, type FlatQuery, type OrQuery, type RoutesQueryRequest } from '@sge/domain';
 import { decodeParam, describeParamIssue, filterDefinitions } from './filterParams';
 
 /** An advanced Query: an `and` / `or` / `not` tree, sent as the `POST /api/routes/query` body. */
@@ -19,16 +19,6 @@ export const groupParts = (group: Group): { op: GroupOperator; members: Query[] 
   'and' in group ? { op: 'and', members: group.and } : { op: 'or', members: group.or };
 
 export const makeGroup = (op: GroupOperator, members: Query[]): Group => (op === 'and' ? { and: members } : { or: members });
-
-/**
- * `tree` with `leaf` as a direct member of its top-level `and`, replacing a leaf of the same Filter, as `withFilter` does
- * for flat Queries. A tree whose root isn't an `and` becomes `and(tree, leaf)`.
- */
-export function withTopLevelLeaf(tree: Query, leaf: FilterLeaf): Query {
-  if (!('and' in tree)) return { and: [tree, leaf] };
-  const i = tree.and.findIndex((member) => 'filter' in member && member.filter === leaf.filter);
-  return { and: i === -1 ? [...tree.and, leaf] : tree.and.with(i, leaf) };
-}
 
 /** The flat Query's Filters as members of an `and` tree, with params decoded to their types. Empty params are left out. */
 export function toTree({ filters, params }: FlatQuery): Query {

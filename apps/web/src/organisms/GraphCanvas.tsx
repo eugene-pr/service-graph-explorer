@@ -52,7 +52,7 @@ export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelect
   const moveNode = useUiStore((s) => s.moveNode);
   const clearNodePositions = useUiStore((s) => s.clearNodePositions);
   const clearRouteHighlight = useUiStore((s) => s.clearRouteHighlight);
-  const mapResetVersion = useUiStore((s) => s.mapResetVersion);
+  const resetVersion = useUiStore((s) => s.resetVersion);
   const clearSelection = () => {
     onSelectNode(undefined);
     clearRouteHighlight();
@@ -76,7 +76,7 @@ export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelect
     // Let React Flow apply the new positions and handle bounds before measuring the view.
     const frame = requestAnimationFrame(() => { void flow.current?.fitView(fitViewOptions); });
     return () => cancelAnimationFrame(frame);
-  }, [aspect, source, mapResetVersion]);
+  }, [aspect, source, resetVersion]);
 
   return (
     <section

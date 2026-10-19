@@ -6,8 +6,9 @@ import { useFilterCatalog } from '../hooks/useFilterCatalog';
 import { useGraph } from '../hooks/useGraph';
 import { DEFAULT_QUERY, useQueryState } from '../hooks/useQueryState';
 import { useRoutes } from '../hooks/useRoutes';
+import { withFilterLeaf } from '../lib/queryEdit';
 import type { ExplorerQuery } from '../lib/queryTree';
-import { queryIdentity, withFilterLeaf } from '../lib/queryUrl';
+import { queryIdentity } from '../lib/queryUrl';
 import { WarningsBanner } from '../molecules/WarningsBanner';
 import { EmptyRoutes } from '../organisms/EmptyRoutes';
 import { GraphCanvas } from '../organisms/GraphCanvas';
@@ -32,7 +33,7 @@ export function ExplorerPage() {
   const selectedNode = useUiStore((s) => s.selectedNode);
   const selectNode = useUiStore((s) => s.selectNode);
   const resetMap = useUiStore((s) => s.resetMap);
-  const mapResetVersion = useUiStore((s) => s.mapResetVersion);
+  const resetVersion = useUiStore((s) => s.resetVersion);
   const selected = selectedNode === undefined ? undefined : graph.data?.nodes.find((n) => n.id === selectedNode)?.data;
   const resetExplorer = () => {
     reset();
@@ -73,7 +74,7 @@ export function ExplorerPage() {
             </p>
           ) : (
             <QueryPanel
-              key={mapResetVersion}
+              key={resetVersion}
               filters={catalog.data.filters}
               query={query}
               defaultQuery={DEFAULT_QUERY}
