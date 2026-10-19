@@ -2,6 +2,8 @@
 
 A REST API and React UI for querying Routes in a microservice graph. The API loads the Train Ticket graph, runs Queries (Filters combined with `and` / `or` / `not`) and returns the matching Routes with their union subgraph. The UI shows the whole graph, highlights the matched Routes and keeps the Query in the URL.
 
+![Routes ending at a Sink through a high-severity vulnerability, highlighted on the full graph](docs/screenshots/explorer.png)
+
 A TypeScript pnpm monorepo: `apps/api` (Fastify, Route engine, Filter checks), `apps/web` (React, Vite, React Flow) and `packages/domain` (types, zod schemas and Filter Catalog metadata shared by both). Domain terms (Route, Entry, Sink, Inferred Node, Filter, Filter Catalog, Query) are defined in [`CONTEXT.md`](CONTEXT.md).
 
 ## Running it
@@ -129,6 +131,14 @@ The default Query runs on first load. The left panel toggles Filters and their p
 - **Matched only** hides everything outside the matches and lays them out again.
 - An empty result says why and shows how many Routes each active Filter matches on its own; click a hint to run just that Filter.
 - **Advanced** builds an `and` / `or` / `not` tree with generated param inputs, validates every leaf before sending it to `POST /api/routes/query`, and shows the **Effective Query** the engine ran.
+
+**Matched only** with a node selected: details, vulnerabilities and **Show Routes through here**.
+
+![Matched only view with order-service details](docs/screenshots/matched-node-details.png)
+
+The three required Filters together: the empty state shows how many Routes each Filter matches alone.
+
+![Empty result for startsAtPublic, endsAtSink and hasVulnerability](docs/screenshots/empty-state.png)
 
 ## Design decisions
 
