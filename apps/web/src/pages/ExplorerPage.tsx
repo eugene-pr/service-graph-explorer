@@ -1,7 +1,6 @@
 import type { FilterName, ProblemError } from '@sge/domain';
 import { ApiError } from '../api/client';
 import { Spinner } from '../atoms/Spinner';
-import { Toggle } from '../atoms/Toggle';
 import { useFilterCatalog } from '../hooks/useFilterCatalog';
 import { useGraph } from '../hooks/useGraph';
 import { DEFAULT_QUERY, useQueryState } from '../hooks/useQueryState';
@@ -85,10 +84,6 @@ export function ExplorerPage() {
             />
           )}
           <Legend />
-          <label className="flex items-center gap-2 text-sm">
-            <Toggle checked={matchedOnly} onChange={(event) => setMatchedOnly(event.target.checked)} disabled={!current} />
-            Matched only
-          </label>
         </>
       }
       main={
@@ -105,6 +100,7 @@ export function ExplorerPage() {
             graph={graph.data}
             result={current}
             matchedOnly={matchedOnly}
+            onMatchedOnlyChange={setMatchedOnly}
             selectedNode={selectedNode}
             onSelectNode={selectNode}
             onReset={resetExplorer}

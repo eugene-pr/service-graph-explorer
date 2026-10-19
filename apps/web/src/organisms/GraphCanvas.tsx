@@ -3,6 +3,7 @@ import { Background, Controls, MiniMap, Panel, ReactFlow, type ReactFlowInstance
 import '@xyflow/react/dist/style.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../atoms/Button';
+import { Toggle } from '../atoms/Toggle';
 import { layoutGraph } from '../lib/layout';
 import { layoutSource, selectionAfter, toFlowGraph, type ServiceFlowNode } from '../lib/toFlowGraph';
 import { useUiStore } from '../store/uiStore';
@@ -16,6 +17,7 @@ interface GraphCanvasProps {
   /** Only the current Query result; absent while a new Query runs. */
   result: RoutesResponse | undefined;
   matchedOnly: boolean;
+  onMatchedOnlyChange: (matchedOnly: boolean) => void;
   /** Name of the selected node. */
   selectedNode?: string | undefined;
   onSelectNode: (name: string | undefined) => void;
@@ -45,7 +47,7 @@ function useLayoutAspect(source: ReturnType<typeof layoutSource>) {
   return { ref, aspect };
 }
 
-export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelectNode, onReset }: GraphCanvasProps) {
+export function GraphCanvas({ graph, result, matchedOnly, onMatchedOnlyChange, selectedNode, onSelectNode, onReset }: GraphCanvasProps) {
   const hoveredRoute = useUiStore((s) => s.hoveredRoute);
   const selectedRoute = useUiStore((s) => s.selectedRoute);
   const positions = useUiStore((s) => s.nodePositions);
@@ -111,6 +113,12 @@ export function GraphCanvas({ graph, result, matchedOnly, selectedNode, onSelect
         fitViewOptions={fitViewOptions}
       >
         <Background />
+        <Panel position="top-left">
+          <label className="flex items-center gap-2 rounded border border-border bg-white px-3 py-1.5 text-sm font-medium text-ink has-disabled:opacity-50">
+            <Toggle checked={matchedOnly} onChange={(event) => onMatchedOnlyChange(event.target.checked)} disabled={!result} />
+            Matched only
+          </label>
+        </Panel>
         <Panel position="top-right" className="flex gap-2">
           {(selectedNode !== undefined || selectedRoute !== undefined) && (
             <Button onClick={clearSelection}>Clear selection</Button>
